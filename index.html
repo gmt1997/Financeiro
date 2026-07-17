@@ -936,7 +936,7 @@ function renderTape(){
 /* ================= SUPABASE / CONFIG ================= */
 function setConn(ok, txt){ $("connPill").className = "pill "+(ok===null?"":(ok?"ok":"err")); $("connTxt").textContent = txt; }
 async function connectSupabase(){
-  const url = $("sbUrl").value.trim(), key = $("sbKey").value.trim();
+  const url = $("sbUrl").value.trim().replace(/\/(rest\/v1|auth\/v1|storage\/v1)\/?.*$/, "").replace(/\/+$/, ""), key = $("sbKey").value.trim();
   if(!url || !key) return toast("Informe URL e anon key.");
   try{
     DB.sb = window.supabase.createClient(url, key);
@@ -1221,18 +1221,66 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("sbMigrate").onclick = migrateSeed;
   $("sbLogin").onclick = async ()=>{
     if(!DB.sb) return toast("Conecte primeiro.");
-    const {error} = await DB.sb.auth.signInWithPassword({email:$("sbEmail").value, password:$("sbPass").value});
+    const email=$("sbEmail").value, pass=$("sbPass").value;
+    const {error} = await DB.sb.auth.signInWithPassword({email, password:pass});
     if(error) return toast("Login falhou: "+error.message);
+    // persistir credenciais de auth para relogin automático
+    try{ const saved=JSON.parse(safeStore.get("mesafin_sb")||"{}"); saved.email=email; saved.pass=pass; safeStore.set("mesafin_sb",JSON.stringify(saved)); }catch(e){}
     toast("Login efetuado."); try{ await DB.loadSupabase(); renderAll(); }catch(e){}
   };
-  $("sbLogout").onclick = async ()=>{ if(DB.sb) await DB.sb.auth.signOut(); toast("Sessão encerrada."); };
+  $("sbLogout").onclick = async ()=>{ if(DB.sb) await DB.sb.auth.signOut(); try{ const s=JSON.parse(safeStore.get("mesafin_sb")||"{}"); delete s.email; delete s.pass; safeStore.set("mesafin_sb",JSON.stringify(s)); }catch(e){} toast("Sessão encerrada."); };
   $("impFile").onchange = e => { const f=e.target.files[0]; if(f) handleImportFile(f); };
   $("impDedup").onchange = ()=>{ if(window._imp) renderImportPreview(); };
   $("expTx").onclick=exportTx; $("expBtc").onclick=exportBtc; $("expPat").onclick=exportPat; $("expJson").onclick=exportJson;
 
-  // restore supabase creds
-  try{ const saved = JSON.parse(safeStore.get("mesafin_sb")||"null");
-    if(saved){ $("sbUrl").value=saved.url; $("sbKey").value=saved.key; } }catch(e){}
+  // restore supabase creds + auto-reconectar e relogar
+  (async ()=>{
+    try{
+      const saved = JSON.parse(safeStore.get("mesafin_sb")||"null");
+      if(!saved) return;
+      $("sbUrl").value = saved.url;
+      $("sbKey").value = saved.key;
+      // activar visualmente o botão Supabase
+      $("modeSeg").querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.v==="supabase"));
+      $("sbBox").style.display = "";
+      setConn(null,"Reconectando…");
+      DB.sb = window.supabase.createClient(saved.url, saved.key);
+      // tentar restaurar sessão existente (o supabase-js guarda em localStorage)
+      // restaurar campos de e-mail/senha
+      if(saved.email) $("sbEmail").value=saved.email;
+      if(saved.pass)  $("sbPass").value=saved.pass;
+      const {data:{session}} = await DB.sb.auth.getSession();
+      if(session){
+        DB.mode = "supabase";
+        await DB.loadSupabase();
+        $("sbAuth").style.display = "";
+        setConn(true, `Conectado · ${DB.tx.length} lançamentos no banco`);
+        renderAll();
+        return;
+      }
+      // sem sessão ativa: tentar relogin automático com credenciais salvas
+      if(saved.email && saved.pass){
+        const {error:le} = await DB.sb.auth.signInWithPassword({email:saved.email, password:saved.pass});
+        if(!le){
+          await DB.loadSupabase(); DB.mode="supabase";
+          $("sbAuth").style.display="";
+          setConn(true,`Conectado · ${DB.tx.length} lançamentos no banco`);
+          renderAll(); return;
+        }
+      }
+      // sem sessão e sem credenciais salvas: tentar anônimo, senão pedir login
+      try{
+        await DB.loadSupabase();
+        DB.mode = "supabase";
+        $("sbAuth").style.display = "";
+        setConn(true, `Conectado · ${DB.tx.length} lançamentos no banco`);
+        renderAll();
+      }catch(e){
+        $("sbAuth").style.display = "";
+        setConn(false,"Conectado — faça login para carregar os dados");
+      }
+    }catch(e){ /* silencioso — fica em modo local */ }
+  })();
 
   // tenta cotação ao abrir (silencioso)
   fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl")
