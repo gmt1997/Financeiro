@@ -497,7 +497,7 @@ const DB = {
     for(const r of [t,b,p]) if(r.error) throw r.error;
     this.tx = t.data.map(r=>({...r, valor:+r.valor}));
     this.btc = b.data.map(r=>({...r, quantidade:+r.quantidade, preco:r.preco==null?null:+r.preco, total:r.total==null?null:+r.total}));
-    this.pat = p.data.map(r=>{ const o={...r, mes:String(r.mes).slice(0,7)}; PAT_CLASSES.forEach(([k])=>o[k]=+(r[k]||0)); o.rentabilidade=r.rentabilidade==null?null:+r.rentabilidade; return o; });
+    this.pat = p.data.map(r=>{ const o={...r, mes:String(r.mes).slice(0,7)}; PAT_CLASSES.forEach(([k])=>o[k]=+(r[k]||0)); o.rentabilidade=r.rentabilidade==null?null:+r.rentabilidade; if(!o.patrimonio) o.patrimonio=PAT_CLASSES.reduce((s,[k])=>s+(o[k]||0),0); return o; });
     this.sort();
   },
   async addTx(t){ if(this.mode==="supabase"){ const {data,error}=await this.sb.from("transacoes").insert(t).select().single(); if(error) throw error; this.tx.push({...data, valor:+data.valor}); } else { t.id=uid(); this.tx.push(t); this._ov.addTx.push(t); this.saveLocal(); } this.sort(); },
