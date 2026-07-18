@@ -650,8 +650,14 @@ function renderHome(){
       plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtBRL(Math.abs(c.parsed.y))}`}}}}});
 
   let acc=0; const cum = g.map(r=>acc+=r.saldo);
-  mkChart("chCum",{type:"line",data:{labels,datasets:[{label:"Acumulado",data:cum,borderColor:"#3D5A80",backgroundColor:"rgba(61,90,128,.10)",fill:true,tension:.3,pointRadius:0,borderWidth:2}]},
-    options:{maintainAspectRatio:false,scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{ticks:{callback:moneyTick}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ttMoney}}}}});
+  mkChart("chCum",{type:"line",data:{labels,datasets:[{label:"Acumulado",data:cum,borderColor:"#3D5A80",backgroundColor:"rgba(61,90,128,.10)",fill:true,tension:.3,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:"#3D5A80",pointHoverBorderColor:"#fff",pointHoverBorderWidth:2,borderWidth:2}]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{ticks:{callback:moneyTick}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{
+        title:items=>items[0].label,
+        label:c=>` Acumulado: ${fmtBRL(c.parsed.y)}`,
+        afterBody:items=>{ const s=g[items[0].dataIndex]?.saldo; return s!=null?` Saldo do período: ${(s>=0?"+":"")+fmtBRL(s)}`:""; }
+      }}}}});
 
   const cats = catAgg("DESPESA", t=>t.data.slice(0,7)===mSel.ym);
   $("hintDonut").textContent = "Despesas de "+ymLabel(mSel.ym);
