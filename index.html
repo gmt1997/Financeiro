@@ -103,6 +103,7 @@ tr.editing{background:#F4F6F9}
 tr.editing td{padding:5px 8px}
 tr.editing input,tr.editing select{width:100%;padding:6px 8px;font-size:.8rem}
 tr.editing input[type=number]{font-family:var(--mono)}
+tr.editing .ci{width:100%;padding:6px 8px;font-size:.8rem}
 
 /* ---------- Forms ---------- */
 .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
@@ -644,6 +645,20 @@ const DB = {
   },
   async addBtc(t){ if(this.mode==="supabase"){ const {data,error}=await this.sb.from("btc_trades").insert(t).select().single(); if(error) throw error; this.btc.push({...data, quantidade:+data.quantidade, preco:+data.preco, total:+data.total}); } else { t.id=uid(); this.btc.push(t); this._ov.addBtc.push(t); this.saveLocal(); } this.sort(); },
   async delBtc(id){ if(this.mode==="supabase"){ const {error}=await this.sb.from("btc_trades").delete().eq("id",id); if(error) throw error; } else { this._ov.addBtc=this._ov.addBtc.filter(x=>x.id!==id); if(String(id).startsWith("s_")) this._ov.delBtc.push(id); this.saveLocal(); } this.btc=this.btc.filter(x=>x.id!==id); },
+  async updateCC(id, patch){
+    const p = {...patch}; if(p.mes) p.mes = p.mes+"-01";
+    const {data,error} = await this.sb.from("cartao_compras").update(p).eq("id",id).select().single();
+    if(error) throw error;
+    const c = this.cc.find(x=>x.id===id);
+    if(c) Object.assign(c, {...data, mes:String(data.mes).slice(0,7), valor:+data.valor,
+      parcela:data.parcela==null?null:+data.parcela, parcelas:data.parcelas==null?null:+data.parcelas});
+  },
+  async addCC(row){
+    const {data,error} = await this.sb.from("cartao_compras").insert({...row, mes:row.mes+"-01"}).select().single();
+    if(error) throw error;
+    this.cc.push({...data, mes:String(data.mes).slice(0,7), valor:+data.valor,
+      parcela:data.parcela==null?null:+data.parcela, parcelas:data.parcelas==null?null:+data.parcelas});
+  },
   async delCC(id){ const {error}=await this.sb.from("cartao_compras").delete().eq("id",id); if(error) throw error; this.cc=this.cc.filter(x=>x.id!==id); },
   async addPat(t){ if(this.mode==="supabase"){ const row={...t, mes:t.mes+"-01"}; const {data,error}=await this.sb.from("patrimonio").insert(row).select().single(); if(error) throw error; const o={...data, mes:String(data.mes).slice(0,7)}; PAT_CLASSES.forEach(([k])=>o[k]=+(o[k]||0)); this.pat.push(o); } else { t.id=uid(); this.pat.push(t); this._ov.addPat.push(t); this.saveLocal(); } this.sort(); },
   async delPat(id){ if(this.mode==="supabase"){ const {error}=await this.sb.from("patrimonio").delete().eq("id",id); if(error) throw error; } else { this._ov.addPat=this._ov.addPat.filter(x=>x.id!==id); if(String(id).startsWith("s_")) this._ov.delPat.push(id); this.saveLocal(); } this.pat=this.pat.filter(x=>x.id!==id); },
@@ -1075,6 +1090,35 @@ async function fetchBtcPx(){
 
 
 /* ================= CARTÕES ================= */
+let ccEditId = null;
+function ccEditRow(c){
+  const cards = cartoesAll().map(x=>`<option ${x===c.cartao?"selected":""}>${x}</option>`).join("");
+  return `<tr class="editing" data-ccrow="${c.id}">
+    <td><input type="text" class="ci" data-k="descricao" value="${(c.descricao||"").replace(/"/g,"&quot;")}"></td>
+    <td><select class="ci" data-k="cartao">${cards}</select></td>
+    <td class="num"><div style="display:flex;gap:4px;align-items:center">
+      <input type="number" class="ci" data-k="parcela" min="1" max="99" value="${c.parcela||""}" placeholder="–" style="width:52px;text-align:right">
+      <span class="muted">/</span>
+      <input type="number" class="ci" data-k="parcelas" min="1" max="99" value="${c.parcelas||""}" placeholder="–" style="width:52px;text-align:right"></div></td>
+    <td class="num"><input type="number" step="0.01" min="0" class="ci" data-k="valor" value="${c.valor}" style="text-align:right"></td>
+    <td class="acts"><button class="ed save" data-savecc="${c.id}" title="Salvar">✓</button><button class="del" data-cancelcc="1" title="Cancelar">✕</button></td>
+  </tr>`;
+}
+async function saveCcEdit(id){
+  const row = document.querySelector(`tr[data-ccrow="${id}"]`); if(!row) return;
+  const g = k => row.querySelector(`.ci[data-k="${k}"]`).value;
+  const valor = parseFloat(g("valor"));
+  if(!(valor>=0)) return toast("Valor inválido.");
+  const pa = g("parcela")===""?null:parseInt(g("parcela"));
+  const pt = g("parcelas")===""?null:parseInt(g("parcelas"));
+  if((pa&&!pt)||(pt&&!pa)) return toast("Informe parcela e total (ex.: 2 e 5) ou deixe ambos vazios.");
+  if(pa&&pt&&pa>pt) return toast("A parcela não pode ser maior que o total.");
+  try{
+    await DB.updateCC(id, {descricao:g("descricao").trim(), cartao:g("cartao"), valor:+valor.toFixed(2), parcela:pa, parcelas:pt});
+    ccEditId=null; toast("Compra atualizada."); renderAll();
+  }catch(e){ toast("Erro: "+(e.message||e)); }
+}
+
 function ccUnified(){
   // histórico da planilha + lançamentos novos com forma=Cartão de Crédito
   const hist = DB.cc.map(c=>({src:"hist", id:c.id, mes:c.mes, cartao:c.cartao, descricao:c.descricao,
@@ -1108,10 +1152,7 @@ function renderCartoes(){
   const mesAtual = byMes.get(nowYM)||0;
   const last12 = meses.filter(m=>m<=nowYM).slice(-12);
   const med12 = last12.length? last12.reduce((s,m)=>s+byMes.get(m),0)/last12.length : 0;
-  // comprometido futuro: parcelas em meses > atual
-  const fut = f.filter(c=>c.mes>nowYM);
-  const futVal = fut.reduce((s,c)=>s+c.valor,0);
-  // parcelamentos ativos: grupos com parcelas cuja última parcela >= mês atual
+  // parcelamentos: agrupa por cartão + descrição + total de parcelas
   const groups = new Map();
   for(const c of f){ if(!c.parcelas||c.parcelas<2) continue;
     const k = c.cartao+"|"+c.descricao.toLowerCase()+"|"+c.parcelas;
@@ -1119,15 +1160,31 @@ function renderCartoes(){
     groups.get(k).itens.push(c); }
   const ativos = [...groups.values()].map(g=>{
     g.itens.sort((a,b)=>a.mes<b.mes?-1:1);
-    const pagas = g.itens.filter(i=>i.mes<=nowYM).length;
-    const ultima = g.itens[g.itens.length-1].mes;
-    const vparc = g.itens[g.itens.length-1].valor;
-    return {...g, pagas, ultima, vparc, restante: vparc*Math.max(0,g.parcelas-pagas)};
-  }).filter(g=>g.ultima>=nowYM).sort((a,b)=>b.restante-a.restante);
+    const ult = g.itens[g.itens.length-1];
+    const registradas = g.itens.length;
+    // nº da última parcela conhecida (ex.: "3/5" → 3). Sem número, usa a contagem.
+    const ultNum = ult.parcela || registradas;
+    const vparc = ult.valor;
+    const faltam = Math.max(0, g.parcelas - ultNum);
+    // mês final previsto = mês da última parcela registrada + as que faltam
+    const [uy,um] = ult.mes.split("-").map(Number);
+    const fim = new Date(uy, um-1+faltam, 1);
+    const ultima = fim.getFullYear()+"-"+String(fim.getMonth()+1).padStart(2,"0");
+    return {...g, pagas:ultNum, registradas, faltam, ultima, vparc, restante: vparc*faltam};
+  }).filter(g=>g.ultima>=nowYM)   // só o que ainda tem parcela a vencer (ou termina neste mês)
+    .sort((a,b)=>b.restante-a.restante);
+
+  // comprometido futuro = parcelas que faltam lançar + compras já registradas em meses futuros
+  //                       (exclui as futuras que pertencem a parcelamentos, para não contar 2x)
+  const kAtivos = new Set(ativos.map(g=>g.cartao+"|"+g.descricao.toLowerCase()+"|"+g.parcelas));
+  const futSolo = f.filter(c=>c.mes>nowYM && !(c.parcelas>=2 && kAtivos.has(c.cartao+"|"+c.descricao.toLowerCase()+"|"+c.parcelas)));
+  const projetado = ativos.reduce((s,g)=>s+g.restante,0);
+  const futVal = projetado + futSolo.reduce((s,c)=>s+c.valor,0);
+  const nParcFalt = ativos.reduce((s,g)=>s+g.faltam,0) + futSolo.length;
 
   $("ccKpis").innerHTML = `
     <div class="kpi"><div class="l">Fatura do mês${sel.value?" · "+sel.value:""}</div><div class="v neg">${fmtBRL0(mesAtual)}</div><div class="s">média 12m ${fmtBRL0(med12)}</div></div>
-    <div class="kpi"><div class="l">Comprometido futuro</div><div class="v">${fmtBRL0(futVal)}</div><div class="s">${fut.length} parcelas a vencer</div></div>
+    <div class="kpi"><div class="l">Comprometido futuro</div><div class="v">${fmtBRL0(futVal)}</div><div class="s">${nParcFalt} parcela(s) a vencer</div></div>
     <div class="kpi"><div class="l">Parcelamentos ativos</div><div class="v blue">${ativos.length}</div><div class="s">restante ${fmtBRL0(ativos.reduce((s,g)=>s+g.restante,0))}</div></div>
     <div class="kpi"><div class="l">Compras registradas</div><div class="v">${f.length.toLocaleString("pt-BR")}</div><div class="s">${meses[0]||"—"} → ${meses[meses.length-1]||"—"}</div></div>`;
 
@@ -1139,13 +1196,32 @@ function renderCartoes(){
     return {label:cd, data:meses24.map(x=>m.get(x)||0),
       backgroundColor: CC_COLORS[cd] || ["#8A6A16","#5E9E8A","#8B5E83","#8C6250"][i%4]};
   });
-  $("ccHint").textContent = (ccRange? `Últimos ${ccRange} meses` : `Histórico completo · ${mesesAll[0]?ymLabel(mesesAll[0]):""} → ${mesesAll.length?ymLabel(mesesAll[mesesAll.length-1]):""}`) + " · barras empilhadas";
+  // totais mensais → média e tendência (mínimos quadrados)
+  const totMes = meses24.map(m => all.filter(c=>c.mes===m && (!sel.value||c.cartao===sel.value)).reduce((s,c)=>s+c.valor,0));
+  const nT = totMes.length;
+  const media = nT ? totMes.reduce((s,v)=>s+v,0)/nT : 0;
+  let a=0,bq=0;
+  if(nT>1){
+    const sx=(nT-1)*nT/2, sy=totMes.reduce((s,v)=>s+v,0);
+    const sxx=totMes.reduce((s,_,i)=>s+i*i,0), sxy=totMes.reduce((s,v,i)=>s+i*v,0);
+    const den = nT*sxx - sx*sx;
+    a = den? (nT*sxy - sx*sy)/den : 0;      // inclinação (R$/mês)
+    bq = (sy - a*sx)/nT;                     // intercepto
+  }
+  const trend = totMes.map((_,i)=>Math.max(0, bq + a*i));
+  window._ccTrend = {media, a, ultimo: totMes[nT-1]||0};
+  {const per = ccRange? `Últimos ${ccRange} meses` : `Histórico completo · ${mesesAll[0]?ymLabel(mesesAll[0]):""} → ${mesesAll.length?ymLabel(mesesAll[mesesAll.length-1]):""}`;
+   $("ccHint").innerHTML = `${per} · média <b>${fmtBRL0(media)}</b> · tendência <b class="${a>=0?"neg":"pos"}">${a>=0?"▲":"▼"} ${fmtBRL0(Math.abs(a))}/mês</b>`;}
+  dsets.push(
+    {type:"line",label:"Média",data:totMes.map(()=>media),borderColor:"#3D5A80",borderWidth:1.5,borderDash:[6,4],pointRadius:0,fill:false,order:0},
+    {type:"line",label:"Tendência",data:trend,borderColor:"#9B958A",borderWidth:1.5,pointRadius:0,fill:false,order:0}
+  );
   mkChart("chCcMes",{type:"bar",data:{labels:meses24.map(ymLabel),datasets:dsets},
     options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
       scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:ccRange&&ccRange<=24?12:16}},y:{stacked:true,ticks:{callback:moneyTick}}},
       plugins:{legend:{position:"bottom",labels:{boxWidth:9,font:{size:10}}},
         tooltip:{callbacks:{label:c=>c.parsed.y?` ${c.dataset.label}: ${fmtBRL(c.parsed.y)}`:null,
-          footer:items=>{const t=items.reduce((s,i)=>s+i.parsed.y,0); return "Total: "+fmtBRL0(t);}}}}}});
+          footer:items=>{const t=items.filter(i=>i.dataset.type!=="line").reduce((s,i)=>s+i.parsed.y,0); return "Total: "+fmtBRL0(t);}}}}}});
 
   // donut: participação por cartão (mesmo período do gráfico)
   const cut12 = meses24;
@@ -1159,7 +1235,7 @@ function renderCartoes(){
 
   // tabela de parcelamentos ativos
   $("tblCcParc").innerHTML = `<thead><tr><th>Compra</th><th>Cartão</th><th class="num">Parcela</th><th class="num">Progresso</th><th class="num">Última</th><th class="num">Restante</th></tr></thead><tbody>`+
-    (ativos.length? ativos.map(g=>`<tr><td>${g.descricao}</td><td><span class="tag pay">${g.cartao}</span></td><td class="num">${fmtBRL(g.vparc)}</td><td class="num">${g.pagas}/${g.parcelas}</td><td class="num">${ymLabel(g.ultima)}</td><td class="num"><b>${fmtBRL0(g.restante)}</b></td></tr>`).join("")
+    (ativos.length? ativos.map(g=>`<tr><td>${g.descricao}</td><td><span class="tag pay">${g.cartao}</span></td><td class="num">${fmtBRL(g.vparc)}</td><td class="num">${g.pagas}/${g.parcelas}</td><td class="num">${ymLabel(g.ultima)}${g.faltam?" <span class=\"muted\">prev.</span>":""}</td><td class="num"><b>${fmtBRL0(g.restante)}</b></td></tr>`).join("")
     : `<tr><td colspan="6" class="muted">Nenhum parcelamento ativo.</td></tr>`)+"</tbody>";
 
   // tabela de compras do mês selecionado
@@ -1167,8 +1243,8 @@ function renderCartoes(){
   selMes.innerHTML = meses.slice().reverse().map(m=>`<option value="${m}">${ymLabel(m)}</option>`).join("");
   selMes.value = meses.includes(curM) ? curM : (meses.includes(nowYM)? nowYM : meses[meses.length-1]);
   const doMes = f.filter(c=>c.mes===selMes.value).sort((a,b)=>b.valor-a.valor);
-  $("tblCcItens").innerHTML = `<thead><tr><th>Descrição</th><th>Cartão</th><th class="num">Parcela</th><th class="num">Valor</th><th></th></tr></thead><tbody>`+
-    doMes.map(c=>`<tr><td>${c.descricao}</td><td><span class="tag pay">${c.cartao}</span></td><td class="num">${c.parcela?c.parcela+"/"+c.parcelas:"—"}</td><td class="num neg">${fmtBRL(c.valor)}</td><td>${c.src==="hist"?`<button class="del" data-delcc="${c.id}">✕</button>`:""}</td></tr>`).join("")+
+  $("tblCcItens").innerHTML = `<thead><tr><th>Descrição</th><th>Cartão</th><th class="num">Parcela</th><th class="num">Valor</th><th style="width:76px"></th></tr></thead><tbody>`+
+    doMes.map(c=> c.id===ccEditId ? ccEditRow(c) : `<tr><td>${c.descricao}</td><td><span class="tag pay">${c.cartao}</span></td><td class="num">${c.parcela?c.parcela+"/"+c.parcelas:"—"}</td><td class="num neg">${fmtBRL(c.valor)}</td><td class="acts">${c.src==="hist"?`<button class="ed" data-editcc="${c.id}" title="Editar">✎</button><button class="del" data-delcc="${c.id}" title="Excluir">✕</button>`:`<span class="tag" title="Editar em Lançamentos">app</span>`}</td></tr>`).join("")+
     `<tr><td><b>Total ${ymLabel(selMes.value)}</b></td><td></td><td></td><td class="num"><b>${fmtBRL(doMes.reduce((s,c)=>s+c.valor,0))}</b></td><td></td></tr></tbody>`;
 }
 
@@ -1495,9 +1571,15 @@ document.addEventListener("DOMContentLoaded", ()=>{
     $("ccRangeSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); renderCartoes(); });
   $("ccMes").onchange = renderCartoes;
   $("tblCcItens").addEventListener("click", async e=>{
-    const id=e.target.dataset?.delcc; if(!id) return;
-    if(!confirm("Excluir esta compra do histórico?")) return;
-    try{ await DB.delCC(id); renderCartoes(); }catch(err){ toast("Erro: "+err.message); }
+    const b=e.target.closest("button"); if(!b) return;
+    if(b.dataset.editcc){ ccEditId=b.dataset.editcc; renderCartoes(); return; }
+    if(b.dataset.cancelcc){ ccEditId=null; renderCartoes(); return; }
+    if(b.dataset.savecc){ await saveCcEdit(b.dataset.savecc); return; }
+    if(b.dataset.delcc){
+      if(!confirm("Excluir esta compra do histórico?")) return;
+      try{ await DB.delCC(b.dataset.delcc); if(ccEditId===b.dataset.delcc) ccEditId=null; renderAll(); }
+      catch(err){ toast("Erro: "+err.message); }
+    }
   });
 
   // config
