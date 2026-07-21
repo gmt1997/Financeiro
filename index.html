@@ -307,18 +307,19 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
   <p class="note" id="ccMissing" style="display:none;margin-bottom:14px">⚠ Tabela <code>cartao_compras</code> não encontrada no banco — rode a <code>migracao_cartoes.sql</code> e os seeds para ver o histórico. Lançamentos novos com cartão já aparecem aqui mesmo assim.</p>
   <div class="bar">
     <select id="ccCard"></select>
+    <div class="seg" id="ccRangeSeg"><button data-v="12">12m</button><button data-v="24" class="on">24m</button><button data-v="36">36m</button><button data-v="0">Tudo</button></div>
     <span class="spacer"></span>
   </div>
   <div class="kpis" id="ccKpis"></div>
   <div class="card">
     <h3>Fatura mensal por cartão</h3>
-    <div class="hint">Últimos 24 meses · barras empilhadas</div>
+    <div class="hint" id="ccHint">Últimos 24 meses · barras empilhadas</div>
     <div class="chartbox tall"><canvas id="chCcMes"></canvas></div>
   </div>
   <div class="grid2">
     <div class="card">
       <h3>Participação por cartão</h3>
-      <div class="hint">Últimos 12 meses</div>
+      <div class="hint" id="ccPartHint">Últimos 24 meses</div>
       <div class="chartbox short"><canvas id="chCcPart"></canvas></div>
     </div>
     <div class="card">
@@ -648,10 +649,40 @@ const DB = {
   async delPat(id){ if(this.mode==="supabase"){ const {error}=await this.sb.from("patrimonio").delete().eq("id",id); if(error) throw error; } else { this._ov.addPat=this._ov.addPat.filter(x=>x.id!==id); if(String(id).startsWith("s_")) this._ov.delPat.push(id); this.saveLocal(); } this.pat=this.pat.filter(x=>x.id!==id); },
 };
 
+
+/* ===== Sincronização cartões → fluxo de caixa =====
+   O histórico do DRE já embute os gastos de cartão até o último mês lançado.
+   Para meses posteriores (ainda sem DRE), as compras do cartão entram no fluxo
+   como despesas virtuais, para o saldo do mês não ficar subestimado.
+   Detecção: lançamentos do DRE não têm forma de pagamento (forma vazia). */
+function lastDreMonth(){
+  let last = "";
+  for(const t of DB.tx){ if(!t.forma && t.data.slice(0,7) > last) last = t.data.slice(0,7); }
+  return last || "0000-00";
+}
+function ccVirtualTx(){
+  const cut = lastDreMonth();
+  const out = [];
+  for(const c of DB.cc){
+    if(c.mes <= cut) continue;                 // já contabilizado no DRE
+    out.push({ id:"cc_"+c.id, virtual:true, data:c.mes+"-15",
+      tipo:"DESPESA", categoria:"CARTÃO DE CRÉDITO",
+      descricao:(c.descricao||"")+(c.parcela?` (${c.parcela}/${c.parcelas})`:""),
+      forma:"Cartão de Crédito", cartao:c.cartao, valor:c.valor });
+  }
+  return out;
+}
+/** Universo de lançamentos para KPIs, gráficos e análises (reais + virtuais). */
+function allTx(){ return DB._vtx && DB._vtx.length ? DB.tx.concat(DB._vtx) : DB.tx; }
+function refreshVirtual(){
+  DB._vtx = ccVirtualTx();
+  if(DB._vtx.length && !DCATS.includes("CARTÃO DE CRÉDITO")){ DCATS.push("CARTÃO DE CRÉDITO"); DCATS.sort(); }
+}
+
 /* ================= aggregations ================= */
 function monthlyAgg(){
   const m = new Map();
-  for(const t of DB.tx){
+  for(const t of allTx()){
     const ym = t.data.slice(0,7);
     if(!m.has(ym)) m.set(ym,{rec:0,des:0});
     const o = m.get(ym);
@@ -661,7 +692,7 @@ function monthlyAgg(){
 }
 function yearAgg(){
   const m = new Map();
-  for(const t of DB.tx){
+  for(const t of allTx()){
     const y = t.data.slice(0,4);
     if(!m.has(y)) m.set(y,{rec:0,des:0});
     const o=m.get(y); if(t.tipo==="RECEITA") o.rec+=t.valor; else o.des+=t.valor;
@@ -670,7 +701,7 @@ function yearAgg(){
 }
 function catAgg(tipo, filterFn){
   const m = new Map();
-  for(const t of DB.tx){ if(t.tipo!==tipo) continue; if(filterFn && !filterFn(t)) continue; m.set(t.categoria,(m.get(t.categoria)||0)+t.valor); }
+  for(const t of allTx()){ if(t.tipo!==tipo) continue; if(filterFn && !filterFn(t)) continue; m.set(t.categoria,(m.get(t.categoria)||0)+t.valor); }
   return [...m.entries()].sort((a,b)=>b[1]-a[1]);
 }
 function btcStats(){
@@ -766,7 +797,7 @@ function renderHome(){
   mkChart("chDonut",{type:"doughnut",data:{labels:cats.map(c=>c[0]),datasets:[{data:cats.map(c=>c[1]),backgroundColor:dCols,borderColor:"#FFFFFF",borderWidth:2}]},
     options:{maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"right",labels:{boxWidth:9,font:{size:10}}},tooltip:{callbacks:{label:c=>` ${c.label}: ${fmtBRL(c.parsed)} (${fmtPct(c.parsed/mSel.des)})`}}}}});
 
-  const rec = [...DB.tx].sort((a,b)=>b.data<a.data?-1:1).slice(0,10);
+  const rec = [...allTx()].sort((a,b)=>b.data<a.data?-1:1).slice(0,10);
   $("tblRecent").innerHTML = `<thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th class="num">Valor</th></tr></thead><tbody>`+
     rec.map(t=>`<tr><td>${t.data.split("-").reverse().join("/")}</td><td><span class="tag ${t.tipo==="RECEITA"?"rec":"des"}">${t.tipo}</span></td><td>${t.categoria}</td><td>${t.descricao||""}</td><td class="num ${t.tipo==="RECEITA"?"pos":"neg"}">${fmtBRL(t.valor)}</td></tr>`).join("")+`</tbody>`;
 }
@@ -793,7 +824,7 @@ function fillCatSelect(){
   updateCartaoFields();
 }
 function fillFilters(){
-  const anos = [...new Set(DB.tx.map(t=>t.data.slice(0,4)))].sort().reverse();
+  const anos = [...new Set(allTx().map(t=>t.data.slice(0,4)))].sort().reverse();
   $("fAno").innerHTML = `<option value="">Todos os anos</option>`+anos.map(a=>`<option>${a}</option>`).join("");
   $("fMes").innerHTML = `<option value="">Todos os meses</option>`+MESES.map((m,i)=>`<option value="${String(i+1).padStart(2,"0")}">${m}</option>`).join("");
   $("fCat").innerHTML = `<option value="">Todas as categorias</option>`+[...DCATS,...RCATS].map(c=>`<option>${c}</option>`).join("");
@@ -805,7 +836,7 @@ function fillFilters(){
 }
 function lancFiltered(){
   const y=$("fAno").value, m=$("fMes").value, tp=$("fTipo").value, c=$("fCat").value, fp=$("fForma").value, q=$("fBusca").value.trim().toLowerCase();
-  return DB.tx.filter(t =>
+  return allTx().filter(t =>
     (!y || t.data.slice(0,4)===y) && (!m || t.data.slice(5,7)===m) &&
     (!tp || t.tipo===tp) && (!c || t.categoria===c) && (!fp || (t.forma||"")===fp) &&
     (!q || (t.descricao||"").toLowerCase().includes(q) || t.categoria.toLowerCase().includes(q)));
@@ -821,7 +852,7 @@ function renderLanc(){
     <div class="kpi"><div class="l">Registros</div><div class="v blue">${rows.length.toLocaleString("pt-BR")}</div></div>`;
   const shown = rows.slice(0,lancLimit);
   $("tblLanc").innerHTML = `<thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Pagamento</th><th class="num">Valor</th><th style="width:76px"></th></tr></thead><tbody>`+
-    shown.map(t=> t.id===lancEditId ? editRowHtml(t) : `<tr><td>${t.data.split("-").reverse().join("/")}</td><td><span class="tag ${t.tipo==="RECEITA"?"rec":"des"}">${t.tipo}</span></td><td>${t.categoria}</td><td>${t.descricao||""}</td><td>${t.forma?`<span class="tag pay">${t.forma}</span>`:'<span class="muted">—</span>'}</td><td class="num ${t.tipo==="RECEITA"?"pos":"neg"}">${fmtBRL(t.valor)}</td><td class="acts"><button class="ed" data-edit="${t.id}" title="Editar">✎</button><button class="del" data-del="${t.id}" title="Excluir">✕</button></td></tr>`).join("")+`</tbody>`;
+    shown.map(t=> t.id===lancEditId ? editRowHtml(t) : `<tr><td>${t.data.split("-").reverse().join("/")}</td><td><span class="tag ${t.tipo==="RECEITA"?"rec":"des"}">${t.tipo}</span></td><td>${t.categoria}</td><td>${t.descricao||""}</td><td>${t.forma?`<span class="tag pay">${t.forma}</span>`:'<span class="muted">—</span>'}</td><td class="num ${t.tipo==="RECEITA"?"pos":"neg"}">${fmtBRL(t.valor)}</td><td class="acts">${t.virtual?'<span class="tag" title="Vem da aba Cartões">cartão</span>':`<button class="ed" data-edit="${t.id}" title="Editar">✎</button><button class="del" data-del="${t.id}" title="Excluir">✕</button>`}</td></tr>`).join("")+`</tbody>`;
   $("lancCount").textContent = `Exibindo ${shown.length} de ${rows.length}`;
   $("lancMore").style.display = rows.length>lancLimit ? "" : "none";
 }
@@ -897,7 +928,7 @@ function renderAnal(){
   const cur = {}, prevTot = {};
   catNames.forEach(c=>{cur[c]=Array(12).fill(0); prevTot[c]=prevCats.get(c)||0;});
   const monthTot = Array(12).fill(0);
-  for(const t of DB.tx){ if(t.tipo!==aTipo||t.data.slice(0,4)!==yr) continue; const m=+t.data.slice(5,7)-1; cur[t.categoria][m]+=t.valor; monthTot[m]+=t.valor; }
+  for(const t of allTx()){ if(t.tipo!==aTipo||t.data.slice(0,4)!==yr) continue; const m=+t.data.slice(5,7)-1; cur[t.categoria][m]+=t.valor; monthTot[m]+=t.valor; }
   const ordered = catNames.map(c=>[c,cur[c].reduce((s,v)=>s+v,0)]).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>0||prevTot[x[0]]>0);
   const activeMonths = monthTot.filter(v=>v>0).length || 1;   // meses com movimento no ano
   const base = aTipo==="DESPESA"?"192,57,75":"23,126,81";
@@ -1058,6 +1089,7 @@ function ccUnified(){
 }
 const CC_COLORS = {"Itaú":"#B26A12","XP":"#1F1D1A","Inter":"#B06A85","Nubank":"#7D6B9E","Swile":"#177E51","PicPay":"#6C8A3A","Pão de Açúcar":"#C0394B","Mercado Pago":"#4E8A99"};
 let ccFilterCard = "";
+let ccRange = 24;   // meses exibidos nos gráficos (0 = tudo)
 function renderCartoes(){
   const all = ccUnified();
   if($("ccMissing")) $("ccMissing").style.display = DB.ccMissing ? "" : "none";
@@ -1099,22 +1131,25 @@ function renderCartoes(){
     <div class="kpi"><div class="l">Parcelamentos ativos</div><div class="v blue">${ativos.length}</div><div class="s">restante ${fmtBRL0(ativos.reduce((s,g)=>s+g.restante,0))}</div></div>
     <div class="kpi"><div class="l">Compras registradas</div><div class="v">${f.length.toLocaleString("pt-BR")}</div><div class="s">${meses[0]||"—"} → ${meses[meses.length-1]||"—"}</div></div>`;
 
-  // gráfico: gastos mensais por cartão (empilhado, últimos 24m)
-  const meses24 = [...new Set(all.map(c=>c.mes))].sort().slice(-24);
+  // gráfico: gastos mensais por cartão (empilhado, período selecionável)
+  const mesesAll = [...new Set(all.map(c=>c.mes))].sort();
+  const meses24 = ccRange ? mesesAll.slice(-ccRange) : mesesAll;
   const dsets = cards.map((cd,i)=>{
     const m = new Map(); for(const c of all){ if(c.cartao!==cd) continue; m.set(c.mes,(m.get(c.mes)||0)+c.valor); }
     return {label:cd, data:meses24.map(x=>m.get(x)||0),
       backgroundColor: CC_COLORS[cd] || ["#8A6A16","#5E9E8A","#8B5E83","#8C6250"][i%4]};
   });
+  $("ccHint").textContent = (ccRange? `Últimos ${ccRange} meses` : `Histórico completo · ${mesesAll[0]?ymLabel(mesesAll[0]):""} → ${mesesAll.length?ymLabel(mesesAll[mesesAll.length-1]):""}`) + " · barras empilhadas";
   mkChart("chCcMes",{type:"bar",data:{labels:meses24.map(ymLabel),datasets:dsets},
     options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-      scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:12}},y:{stacked:true,ticks:{callback:moneyTick}}},
+      scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:ccRange&&ccRange<=24?12:16}},y:{stacked:true,ticks:{callback:moneyTick}}},
       plugins:{legend:{position:"bottom",labels:{boxWidth:9,font:{size:10}}},
         tooltip:{callbacks:{label:c=>c.parsed.y?` ${c.dataset.label}: ${fmtBRL(c.parsed.y)}`:null,
           footer:items=>{const t=items.reduce((s,i)=>s+i.parsed.y,0); return "Total: "+fmtBRL0(t);}}}}}});
 
-  // donut: participação por cartão (últimos 12m)
-  const cut12 = meses24.slice(-12);
+  // donut: participação por cartão (mesmo período do gráfico)
+  const cut12 = meses24;
+  $("ccPartHint").textContent = ccRange? `Últimos ${ccRange} meses` : "Histórico completo";
   const part = cards.map(cd=>[cd, all.filter(c=>c.cartao===cd&&cut12.includes(c.mes)).reduce((s,c)=>s+c.valor,0)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
   const partTot = part.reduce((s,x)=>s+x[1],0)||1;
   mkChart("chCcPart",{type:"doughnut",data:{labels:part.map(x=>x[0]),datasets:[{data:part.map(x=>x[1]),
@@ -1347,7 +1382,7 @@ function exportPat(){ download("patrimonio.csv", "\uFEFF"+csv([["mes",...PAT_CLA
 function exportJson(){ download("backup_financeiro.json", JSON.stringify({tx:DB.tx,btc:DB.btc,pat:DB.pat},null,1), "application/json"); }
 
 /* ================= render root ================= */
-function renderAll(){ renderTape(); renderHome(); renderLanc(); renderAnal(); renderPat(); renderBtc(); renderCartoes(); }
+function renderAll(){ refreshVirtual(); renderTape(); renderHome(); renderLanc(); renderAnal(); renderPat(); renderBtc(); renderCartoes(); }
 
 /* ================= events ================= */
 document.addEventListener("DOMContentLoaded", ()=>{
@@ -1455,6 +1490,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   // cartões
   $("ccCard").onchange = renderCartoes;
+  $("ccRangeSeg").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return;
+    ccRange = +b.dataset.v;
+    $("ccRangeSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); renderCartoes(); });
   $("ccMes").onchange = renderCartoes;
   $("tblCcItens").addEventListener("click", async e=>{
     const id=e.target.dataset?.delcc; if(!id) return;
