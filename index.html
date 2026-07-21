@@ -680,8 +680,8 @@ function ccVirtualTx(){
   const out = [];
   for(const c of DB.cc){
     if(c.mes <= cut) continue;                 // já contabilizado no DRE
-    out.push({ id:"cc_"+c.id, virtual:true, data:c.mes+"-15",
-      tipo:"DESPESA", categoria:"CARTÃO DE CRÉDITO",
+    out.push({ id:"cc_"+c.id, virtual:true, ccId:c.id, data:c.mes+"-15",
+      tipo:"DESPESA", categoria:c.categoria || "OUTROS/IMPREVISTOS",
       descricao:(c.descricao||"")+(c.parcela?` (${c.parcela}/${c.parcelas})`:""),
       forma:"Cartão de Crédito", cartao:c.cartao, valor:c.valor });
   }
@@ -691,7 +691,6 @@ function ccVirtualTx(){
 function allTx(){ return DB._vtx && DB._vtx.length ? DB.tx.concat(DB._vtx) : DB.tx; }
 function refreshVirtual(){
   DB._vtx = ccVirtualTx();
-  if(DB._vtx.length && !DCATS.includes("CARTÃO DE CRÉDITO")){ DCATS.push("CARTÃO DE CRÉDITO"); DCATS.sort(); }
 }
 
 /* ================= aggregations ================= */
@@ -867,7 +866,7 @@ function renderLanc(){
     <div class="kpi"><div class="l">Registros</div><div class="v blue">${rows.length.toLocaleString("pt-BR")}</div></div>`;
   const shown = rows.slice(0,lancLimit);
   $("tblLanc").innerHTML = `<thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Pagamento</th><th class="num">Valor</th><th style="width:76px"></th></tr></thead><tbody>`+
-    shown.map(t=> t.id===lancEditId ? editRowHtml(t) : `<tr><td>${t.data.split("-").reverse().join("/")}</td><td><span class="tag ${t.tipo==="RECEITA"?"rec":"des"}">${t.tipo}</span></td><td>${t.categoria}</td><td>${t.descricao||""}</td><td>${t.forma?`<span class="tag pay">${t.forma}</span>`:'<span class="muted">—</span>'}</td><td class="num ${t.tipo==="RECEITA"?"pos":"neg"}">${fmtBRL(t.valor)}</td><td class="acts">${t.virtual?'<span class="tag" title="Vem da aba Cartões">cartão</span>':`<button class="ed" data-edit="${t.id}" title="Editar">✎</button><button class="del" data-del="${t.id}" title="Excluir">✕</button>`}</td></tr>`).join("")+`</tbody>`;
+    shown.map(t=> t.id===lancEditId ? editRowHtml(t) : `<tr><td>${t.data.split("-").reverse().join("/")}</td><td><span class="tag ${t.tipo==="RECEITA"?"rec":"des"}">${t.tipo}</span></td><td>${t.categoria}</td><td>${t.descricao||""}</td><td>${t.forma?`<span class="tag pay">${t.forma}</span>`:'<span class="muted">—</span>'}</td><td class="num ${t.tipo==="RECEITA"?"pos":"neg"}">${fmtBRL(t.valor)}</td><td class="acts"><button class="ed" data-edit="${t.id}" title="Editar">✎</button>${t.virtual?'<span class="tag" title="Compra de cartão — edite categoria, descrição ou valor">cartão</span>':`<button class="del" data-del="${t.id}" title="Excluir">✕</button>`}</td></tr>`).join("")+`</tbody>`;
   $("lancCount").textContent = `Exibindo ${shown.length} de ${rows.length}`;
   $("lancMore").style.display = rows.length>lancLimit ? "" : "none";
 }
@@ -877,23 +876,36 @@ let lancEditId = null;
 function editRowHtml(t){
   const cats = (t.tipo==="DESPESA"?DCATS:RCATS).map(c=>`<option ${c===t.categoria?"selected":""}>${c}</option>`).join("");
   return `<tr class="editing" data-row="${t.id}">
-    <td><input type="date" class="ei" data-k="data" value="${t.data}"></td>
-    <td><select class="ei" data-k="tipo"><option value="DESPESA" ${t.tipo==="DESPESA"?"selected":""}>DESPESA</option><option value="RECEITA" ${t.tipo==="RECEITA"?"selected":""}>RECEITA</option></select></td>
+    <td>${t.virtual?`<input type="month" class="ei" data-k="mes" value="${t.data.slice(0,7)}">`:`<input type="date" class="ei" data-k="data" value="${t.data}">`}</td>
+    <td>${t.virtual?`<span class="tag des">DESPESA</span>`:`<select class="ei" data-k="tipo"><option value="DESPESA" ${t.tipo==="DESPESA"?"selected":""}>DESPESA</option><option value="RECEITA" ${t.tipo==="RECEITA"?"selected":""}>RECEITA</option></select>`}</td>
     <td><select class="ei" data-k="categoria">${cats}</select></td>
     <td><input type="text" class="ei" data-k="descricao" value="${(t.descricao||"").replace(/"/g,"&quot;")}"></td>
-    <td><select class="ei" data-k="forma">${formaOpts(t.forma||"")}</select></td>
+    <td>${t.virtual?`<span class="tag pay">${t.cartao||"Cartão"}</span>`:`<select class="ei" data-k="forma">${formaOpts(t.forma||"")}</select>`}</td>
     <td class="num"><input type="number" step="0.01" min="0" class="ei" data-k="valor" value="${t.valor}" style="text-align:right"></td>
     <td class="acts"><button class="ed save" data-save="${t.id}" title="Salvar">✓</button><button class="del" data-cancel="1" title="Cancelar">✕</button></td>
   </tr>`;
 }
 async function saveLancEdit(id){
   const row = document.querySelector(`tr[data-row="${id}"]`); if(!row) return;
-  const get = k => row.querySelector(`.ei[data-k="${k}"]`).value;
+  const el = k => row.querySelector(`.ei[data-k="${k}"]`);
+  const get = k => { const e=el(k); return e? e.value : ""; };
   const valor = parseFloat(get("valor"));
-  if(!get("data") || !(valor>=0)) return toast("Data e valor válidos são obrigatórios.");
-  const patch = {data:get("data"), tipo:get("tipo"), categoria:get("categoria"), descricao:get("descricao").trim(), forma:get("forma")||null, valor:+valor.toFixed(2)};
-  try{ await DB.updateTx(id, patch); lancEditId=null; toast("Lançamento atualizado."); fillFilters(); renderAll(); }
-  catch(e){ toast("Erro: "+(e.message||e)); }
+  if(!(valor>=0)) return toast("Informe um valor válido.");
+  const t = allTx().find(x=>x.id===id);
+  try{
+    if(t && t.virtual){
+      // compra de cartão: grava na tabela de cartões
+      const mes = get("mes") || t.data.slice(0,7);
+      await DB.updateCC(t.ccId, {mes, categoria:get("categoria")||null, descricao:get("descricao").trim(), valor:+valor.toFixed(2)});
+      toast("Compra do cartão atualizada.");
+    } else {
+      if(!get("data")) return toast("Informe a data.");
+      await DB.updateTx(id, {data:get("data"), tipo:get("tipo"), categoria:get("categoria"),
+        descricao:get("descricao").trim(), forma:get("forma")||null, valor:+valor.toFixed(2)});
+      toast("Lançamento atualizado.");
+    }
+    lancEditId=null; fillFilters(); renderAll();
+  }catch(e){ toast("Erro: "+(e.message||e)); }
 }
 
 /* ================= ANÁLISES ================= */
@@ -1095,6 +1107,7 @@ function ccEditRow(c){
   const cards = cartoesAll().map(x=>`<option ${x===c.cartao?"selected":""}>${x}</option>`).join("");
   return `<tr class="editing" data-ccrow="${c.id}">
     <td><input type="text" class="ci" data-k="descricao" value="${(c.descricao||"").replace(/"/g,"&quot;")}"></td>
+    <td><select class="ci" data-k="categoria"><option value="">— definir —</option>${DCATS.map(x=>`<option ${x===c.categoria?"selected":""}>${x}</option>`).join("")}</select></td>
     <td><select class="ci" data-k="cartao">${cards}</select></td>
     <td class="num"><div style="display:flex;gap:4px;align-items:center">
       <input type="number" class="ci" data-k="parcela" min="1" max="99" value="${c.parcela||""}" placeholder="–" style="width:52px;text-align:right">
@@ -1114,7 +1127,7 @@ async function saveCcEdit(id){
   if((pa&&!pt)||(pt&&!pa)) return toast("Informe parcela e total (ex.: 2 e 5) ou deixe ambos vazios.");
   if(pa&&pt&&pa>pt) return toast("A parcela não pode ser maior que o total.");
   try{
-    await DB.updateCC(id, {descricao:g("descricao").trim(), cartao:g("cartao"), valor:+valor.toFixed(2), parcela:pa, parcelas:pt});
+    await DB.updateCC(id, {descricao:g("descricao").trim(), categoria:g("categoria")||null, cartao:g("cartao"), valor:+valor.toFixed(2), parcela:pa, parcelas:pt});
     ccEditId=null; toast("Compra atualizada."); renderAll();
   }catch(e){ toast("Erro: "+(e.message||e)); }
 }
@@ -1243,9 +1256,9 @@ function renderCartoes(){
   selMes.innerHTML = meses.slice().reverse().map(m=>`<option value="${m}">${ymLabel(m)}</option>`).join("");
   selMes.value = meses.includes(curM) ? curM : (meses.includes(nowYM)? nowYM : meses[meses.length-1]);
   const doMes = f.filter(c=>c.mes===selMes.value).sort((a,b)=>b.valor-a.valor);
-  $("tblCcItens").innerHTML = `<thead><tr><th>Descrição</th><th>Cartão</th><th class="num">Parcela</th><th class="num">Valor</th><th style="width:76px"></th></tr></thead><tbody>`+
-    doMes.map(c=> c.id===ccEditId ? ccEditRow(c) : `<tr><td>${c.descricao}</td><td><span class="tag pay">${c.cartao}</span></td><td class="num">${c.parcela?c.parcela+"/"+c.parcelas:"—"}</td><td class="num neg">${fmtBRL(c.valor)}</td><td class="acts">${c.src==="hist"?`<button class="ed" data-editcc="${c.id}" title="Editar">✎</button><button class="del" data-delcc="${c.id}" title="Excluir">✕</button>`:`<span class="tag" title="Editar em Lançamentos">app</span>`}</td></tr>`).join("")+
-    `<tr><td><b>Total ${ymLabel(selMes.value)}</b></td><td></td><td></td><td class="num"><b>${fmtBRL(doMes.reduce((s,c)=>s+c.valor,0))}</b></td><td></td></tr></tbody>`;
+  $("tblCcItens").innerHTML = `<thead><tr><th>Descrição</th><th>Categoria</th><th>Cartão</th><th class="num">Parcela</th><th class="num">Valor</th><th style="width:76px"></th></tr></thead><tbody>`+
+    doMes.map(c=> c.id===ccEditId ? ccEditRow(c) : `<tr><td>${c.descricao}</td><td>${c.categoria?c.categoria:'<span class="muted">— definir —</span>'}</td><td><span class="tag pay">${c.cartao}</span></td><td class="num">${c.parcela?c.parcela+"/"+c.parcelas:"—"}</td><td class="num neg">${fmtBRL(c.valor)}</td><td class="acts">${c.src==="hist"?`<button class="ed" data-editcc="${c.id}" title="Editar">✎</button><button class="del" data-delcc="${c.id}" title="Excluir">✕</button>`:`<span class="tag" title="Editar em Lançamentos">app</span>`}</td></tr>`).join("")+
+    `<tr><td><b>Total ${ymLabel(selMes.value)}</b></td><td></td><td></td><td></td><td class="num"><b>${fmtBRL(doMes.reduce((s,c)=>s+c.valor,0))}</b></td><td></td></tr></tbody>`;
 }
 
 /* ================= TAPE ================= */
