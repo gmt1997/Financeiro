@@ -477,7 +477,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
   </div>
   <div class="card">
     <h3>Importar planilha</h3>
-    <div class="hint">Aceita <b>.xlsx</b> com as abas <code>DADOS DRE</code>, <code>BTC</code> e/ou <code>Patrimônio</code> (o formato da sua planilha), ou <b>.csv</b> exportado por este app. As duplicatas são ignoradas — pode re-subir o arquivo mestre sem medo.</div>
+    <div class="hint">Aceita <b>.xlsx</b> com as abas <code>DADOS DRE</code>, <code>BTC</code> e/ou <code>Patrimônio</code>, <b>faturas de cartão</b> (colunas Data · Descrição · Parcela · Valor · Categoria · Cartão) ou <b>.csv</b> exportado por este app. As duplicatas são ignoradas — pode re-subir o arquivo sem medo.</div>
     <div class="bar">
       <input type="file" id="impFile" accept=".xlsx,.xls,.csv">
       <label class="pill" style="cursor:pointer"><input type="checkbox" id="impDedup" checked style="width:auto;min-width:0;margin-right:2px"> ignorar duplicatas</label>
@@ -631,8 +631,8 @@ const DB = {
   async bulkAdd(kind, rows){
     if(!rows.length) return;
     if(this.mode==="supabase"){
-      const table = kind==="tx"?"transacoes":kind==="btc"?"btc_trades":"patrimonio";
-      const payload = rows.map(r=>{ const o={...r}; delete o.id; if(kind==="pat") o.mes=o.mes+"-01"; return o; });
+      const table = kind==="tx"?"transacoes":kind==="btc"?"btc_trades":kind==="cc"?"cartao_compras":"patrimonio";
+      const payload = rows.map(r=>{ const o={...r}; delete o.id; delete o._fatura; delete o._data; if(kind==="pat"||kind==="cc") o.mes=o.mes+"-01"; return o; });
       for(let i=0;i<payload.length;i+=400){ const {error}=await this.sb.from(table).insert(payload.slice(i,i+400)); if(error) throw error; }
       await this.loadSupabase();
     } else {
@@ -1352,8 +1352,27 @@ function detectType(header){
   const h=header.map(_nk); const has=(...n)=>n.some(x=>h.includes(_nk(x)));
   if(has("ordem","operacao") && has("quantidade","qtd")) return "btc";
   if(has("meses","mes","mês") && has("rf")) return "pat";
+  // fatura de cartão: tem cartão e/ou parcela, com data/descrição/valor
+  if(has("cartao","cartão") && has("descricao","descrição") && has("valor")) return "cc";
+  if(has("parcela") && has("descricao","descrição") && has("valor") && has("data")) return "cc";
   if(has("tipo") && has("categoria") && has("valor","valor r$","valor rs")) return "tx";
   return null;
+}
+/** normaliza a categoria da fatura para uma das categorias de despesa do app */
+function matchCat(v){
+  const k=_nk(v); if(!k) return null;
+  const hit = DCATS.find(c=>_nk(c)===k);
+  if(hit) return hit;
+  const alias={"alimentacao":"ALIMENTAÇÃO","mercado":"ALIMENTAÇÃO","transporte":"TRANSPORTE",
+    "saude":"SAÚDE","lazer":"LAZER","vestuario":"VESTUÁRIO","moradia":"MORADIA",
+    "facilidades":"FACILIDADES","namoro":"NAMORO","marketing":"MARKETING","outros":"OUTROS/IMPREVISTOS"};
+  return alias[k] || String(v).trim().toUpperCase();
+}
+/** "Parcela 1 de 5" | "1/5" | "1 de 5" → [1,5] */
+function parseParcela(v){
+  const s=String(v??"").trim(); if(!s) return [null,null];
+  let m=s.match(/(\d+)\s*(?:\/|de)\s*(\d+)/i);
+  return m? [parseInt(m[1]),parseInt(m[2])] : [null,null];
 }
 function findHeaderRow(rows){
   for(let i=0;i<Math.min(rows.length,8);i++){ if(rows[i] && detectType(rows[i])) return i; }
@@ -1376,6 +1395,21 @@ function parseSheet(rows){
       let desc=String(r[ci.desc]??"").trim().replace(/^\*/,"");
       let forma=null; if(ci.forma>=0){ const fv=_nk(r[ci.forma]); forma = fv.includes("cart")?"Cartão de Crédito":fv==="pix"?"Pix":fv.includes("bole")?"Boleto":fv.includes("dinh")?"Dinheiro":(String(r[ci.forma]??"").trim()||null); }
       out.push({data,tipo,categoria:cat,descricao:desc.slice(0,80),forma,valor:+valor.toFixed(2)});
+    }
+  } else if(type==="cc"){
+    const ci={data:colIdx(header,["data"]),desc:colIdx(header,["descrição","descricao","estabelecimento","lançamento","lancamento"]),
+      parc:colIdx(header,["parcela","parcelas"]),valor:colIdx(header,["valor","valor r$"]),
+      cat:colIdx(header,["categoria"]),cartao:colIdx(header,["cartão","cartao"])};
+    for(const r of body){
+      if(!r||r.length===0) continue;
+      const valor=impNum(r[ci.valor]); if(valor==null||valor===0) continue;
+      const d=ci.data>=0?impDate(r[ci.data]):null;
+      const desc=String(r[ci.desc]??"").trim(); if(!desc) continue;
+      if(_nk(desc)==="total"||_nk(desc)==="descricao") continue;
+      const [pa,pt]=ci.parc>=0?parseParcela(r[ci.parc]):[null,null];
+      out.push({ _data:d, mes:d?d.slice(0,7):null, descricao:desc.slice(0,80), valor:+valor.toFixed(2),
+        parcela:pa, parcelas:pt, categoria: ci.cat>=0? matchCat(r[ci.cat]) : null,
+        cartao: ci.cartao>=0? String(r[ci.cartao]??"").trim() : "" });
     }
   } else if(type==="btc"){
     const ci={ordem:colIdx(header,["ordem","operacao"]),broker:colIdx(header,["broker","corretora"]),data:colIdx(header,["negociação","negociacao","data"]),qtd:colIdx(header,["quantidade","qtd"]),preco:colIdx(header,["preço","preco"]),total:colIdx(header,["total"])};
@@ -1414,13 +1448,22 @@ async function handleImportFile(file){
     const buf=await file.arrayBuffer();
     const isCsv=/\.csv$/i.test(file.name);
     const wb=XLSX.read(buf,{type:"array",cellDates:true,raw:!isCsv});
-    const found={tx:[],btc:[],pat:[]};
+    const found={tx:[],btc:[],pat:[],cc:[]};
     for(const nm of wb.SheetNames){
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:!isCsv,blankrows:false,defval:null});
-      const parsed=parseSheet(rows); if(parsed) found[parsed.type].push(...parsed.rows);
+      const parsed=parseSheet(rows); if(!parsed) continue;
+      if(parsed.type==="cc"){
+        // mês da fatura: tenta o nome da aba (Fatura 08-26 / 08-2026 / 2026-08)
+        let fm=null; const s=String(nm);
+        let m=s.match(/(20\d\d)[-\/_](\d{1,2})/);            if(m) fm=`${m[1]}-${String(+m[2]).padStart(2,"0")}`;
+        if(!fm){ m=s.match(/(\d{1,2})[-\/_](20\d\d)/);        if(m) fm=`${m[2]}-${String(+m[1]).padStart(2,"0")}`; }
+        if(!fm){ m=s.match(/(\d{1,2})[-\/_](\d{2})(?!\d)/);   if(m) fm=`20${m[2]}-${String(+m[1]).padStart(2,"0")}`; }
+        parsed.rows.forEach(r=>{ r._fatura=fm; if(fm) r.mes=fm; });
+      }
+      found[parsed.type].push(...parsed.rows);
     }
-    const totalRaw=found.tx.length+found.btc.length+found.pat.length;
-    if(!totalRaw){ st.className="pill err"; stx.textContent="Nenhuma aba reconhecida (esperado: DADOS DRE, BTC ou Patrimônio)."; return; }
+    const totalRaw=found.tx.length+found.btc.length+found.pat.length+found.cc.length;
+    if(!totalRaw){ st.className="pill err"; stx.textContent="Nenhuma aba reconhecida (esperado: DADOS DRE, BTC, Patrimônio ou fatura de cartão)."; return; }
     st.className="pill ok"; stx.textContent="Arquivo lido ✓";
     window._imp=found; renderImportPreview();
   }catch(e){ st.className="pill err"; stx.textContent="Erro ao ler: "+(e.message||e); }
@@ -1429,23 +1472,39 @@ function dedupSets(){
   const kTx=new Set(DB.tx.map(t=>`${t.data}|${t.tipo}|${_nk(t.categoria)}|${_nk(t.descricao)}|${(+t.valor).toFixed(2)}`));
   const kBtc=new Set(DB.btc.map(b=>`${b.data}|${b.operacao}|${(+b.quantidade).toFixed(8)}|${(+(b.total||0)).toFixed(2)}`));
   const kPat=new Set(DB.pat.map(p=>p.mes));
-  return {kTx,kBtc,kPat};
+  const kCc=new Set(DB.cc.map(c=>`${c.mes}|${_nk(c.cartao)}|${_nk(c.descricao)}|${(+c.valor).toFixed(2)}`));
+  return {kTx,kBtc,kPat,kCc};
 }
 function renderImportPreview(){
   const f=window._imp; if(!f) return;
-  const dedup=$("impDedup").checked; const {kTx,kBtc,kPat}=dedupSets();
-  const seenTx=new Set(), seenBtc=new Set(), seenPat=new Set();
+  const dedup=$("impDedup").checked; const {kTx,kBtc,kPat,kCc}=dedupSets();
+  const seenTx=new Set(), seenBtc=new Set(), seenPat=new Set(), seenCc=new Set();
+  // mês da fatura escolhido pelo usuário (se houver compras de cartão)
+  const mesEl = $("impMes");
+  if(f.cc.length && mesEl && mesEl.value) f.cc.forEach(r=>r.mes = mesEl.value);
   const split=(arr,keyFn,dbSet,seen)=>{ const nw=[],dup=[]; for(const r of arr){ const k=keyFn(r); if((dedup&&dbSet.has(k))||seen.has(k)) dup.push(r); else {nw.push(r); seen.add(k);} } return {nw,dup}; };
   const tx=split(f.tx, t=>`${t.data}|${t.tipo}|${_nk(t.categoria)}|${_nk(t.descricao)}|${t.valor.toFixed(2)}`, kTx, seenTx);
   const btc=split(f.btc, b=>`${b.data}|${b.operacao}|${b.quantidade.toFixed(8)}|${(b.total||0).toFixed(2)}`, kBtc, seenBtc);
   const pat=split(f.pat, p=>p.mes, kPat, seenPat);
-  window._impSplit={tx,btc,pat};
+  const cc=split(f.cc, c=>`${c.mes}|${_nk(c.cartao)}|${_nk(c.descricao)}|${c.valor.toFixed(2)}`, kCc, seenCc);
+  window._impSplit={tx,btc,pat,cc};
   const row=(id,nome,s)=> (s.nw.length+s.dup.length)? `<div class="improw"><input type="checkbox" id="imp_${id}" ${s.nw.length?"checked":""} ${s.nw.length?"":"disabled"}><div class="nm">${nome}</div><div class="st"><b class="new">${s.nw.length} novos</b> · <b class="dup">${s.dup.length} já existem</b></div></div>`:"";
+  // seletor do mês da fatura
+  let mesBox = "";
+  if(f.cc.length){
+    const det = f.cc[0]._fatura || f.cc[0].mes || "";
+    const cur = (mesEl && mesEl.value) || det;
+    mesBox = `<div class="improw"><div class="nm">Mês da fatura</div>
+      <input type="month" id="impMes" value="${cur}" style="width:160px">
+      <span class="st">${det?`detectado pela aba: <b>${det}</b>`:"informe o mês de referência"} · compras de datas anteriores entram nesta fatura</span></div>`;
+  }
   $("impPreview").innerHTML =
     row("tx","Lançamentos",tx)+row("btc","Ordens BTC",btc)+row("pat","Patrimônio",pat)+
+    row("cc","Compras de cartão",cc)+mesBox+
     `<div class="bar mt"><button class="btn pri" id="impDo">Importar selecionados</button>
        <span class="note">Modo atual: <b>${DB.mode==="supabase"?"Supabase (grava no banco)":"Local (salvo no navegador)"}</b></span></div>`;
   $("impDo").onclick=doImport;
+  if($("impMes")) $("impMes").onchange = ()=>renderImportPreview();
 }
 async function doImport(){
   const S=window._impSplit; if(!S) return;
@@ -1455,6 +1514,10 @@ async function doImport(){
     if($("imp_tx")?.checked && S.tx.nw.length){ addNewCats(S.tx.nw); await DB.bulkAdd("tx",S.tx.nw); n+=S.tx.nw.length; }
     if($("imp_btc")?.checked && S.btc.nw.length){ await DB.bulkAdd("btc",S.btc.nw); n+=S.btc.nw.length; }
     if($("imp_pat")?.checked && S.pat.nw.length){ await DB.bulkAdd("pat",S.pat.nw); n+=S.pat.nw.length; }
+    if($("imp_cc")?.checked && S.cc.nw.length){
+      const rows=S.cc.nw.map(c=>({mes:c.mes,cartao:c.cartao||null,descricao:c.descricao,valor:c.valor,
+        parcela:c.parcela,parcelas:c.parcelas,categoria:c.categoria}));
+      await DB.bulkAdd("cc",rows); n+=rows.length; }
     toast(`${n} registro(s) importado(s).`); fillCatSelect(); fillFilters(); renderAll();
     $("impPreview").innerHTML=""; $("impFile").value=""; $("impStatus").style.display="none"; window._imp=null;
   }catch(e){ toast("Erro na importação: "+(e.message||e)); btn.disabled=false; btn.textContent="Importar selecionados"; }
