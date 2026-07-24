@@ -56,6 +56,7 @@ h2{font-family:var(--disp);font-size:1.35rem;font-weight:600;letter-spacing:-.01
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid31{display:grid;grid-template-columns:2fr 1fr;gap:12px}
 @media(max-width:880px){.grid2,.grid31{grid-template-columns:1fr}}
+@media(max-width:640px){.mc-grid{grid-template-columns:1fr}}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:12px}
 .card h3{font-family:var(--disp);font-size:.92rem;font-weight:600;margin-bottom:2px}
 .card .hint{font-size:.74rem;color:var(--dim);margin-bottom:12px}
@@ -146,6 +147,32 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
 .gate-setup[open] summary:before{content:"▾ "}
 .gate-setup input{width:100%;margin-top:8px;padding:9px 11px;font-size:.82rem}
 .gate-setup .btn{margin-top:10px;width:100%}
+
+/* ---------- Mês em curso ---------- */
+.mc .mc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.mc .mc-head h3{margin:0}
+.mc-prog{display:flex;align-items:center;gap:8px;min-width:180px;justify-content:flex-end}
+.mc-bar{background:var(--line);border-radius:10px;height:6px;width:120px;overflow:hidden}
+.mc-fill{background:var(--fg);height:100%;border-radius:10px;transition:width .3s}
+.mc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.mc-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.mc-card .l{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.mc-card .v{font-family:var(--mono);font-size:1.35rem;font-weight:600;letter-spacing:-.01em}
+.mc-card .s{font-size:.75rem;color:var(--muted);margin-top:3px}
+
+/* ---------- Alertas ---------- */
+.alertas .al-list{display:flex;flex-direction:column;gap:8px}
+.alertas .al{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;gap:2px 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel)}
+.alertas .al-cat{font-weight:600;font-size:.86rem;display:flex;align-items:center;gap:8px}
+.alertas .al-msg{color:var(--muted);font-size:.78rem;grid-column:1/2}
+.alertas .al-num{font-family:var(--mono);font-size:.95rem;font-weight:600;text-align:right;grid-row:1/3;align-self:center}
+.alertas .al-num .s{display:block;font-family:var(--sans);font-size:.7rem;color:var(--dim);font-weight:400;margin-top:2px}
+.alertas .al-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.alertas .al-neg{border-left:3px solid var(--neg)}    .alertas .al-neg .al-dot{background:var(--neg)}
+.alertas .al-warn{border-left:3px solid #C08014}      .alertas .al-warn .al-dot{background:#C08014}
+.alertas .al-info{border-left:3px solid #3D5A80}      .alertas .al-info .al-dot{background:#3D5A80}
+.alertas .al-ok{color:var(--pos);font-size:.85rem;margin-top:6px}
+.alertas .al-tip{color:var(--muted);font-size:.78rem;margin-top:10px;padding:8px 10px;background:rgba(61,90,128,.06);border-radius:8px}
 
 /* ---------- Mobile ---------- */
 @media(max-width:640px){
@@ -243,6 +270,12 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <span class="pill" id="homeCount"></span>
   </div>
   <div class="kpis" id="homeKpis"></div>
+
+  <div class="grid2">
+    <div class="card mc" id="mesCurso" style="display:none"></div>
+    <div class="card alertas" id="alertas" style="display:none"></div>
+  </div>
+
   <div class="card">
     <h3>Receitas × Despesas × Saldo</h3>
     <div class="hint">Barras: entradas e saídas · Linha: saldo do mês</div>
@@ -476,6 +509,14 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="seg" id="modeSeg" style="display:none"><button data-v="local">Local</button><button data-v="supabase" class="on">Supabase</button></div>
   </div>
   <div class="card">
+    <h3>Sincronização de cartões</h3>
+    <div class="hint">O histórico do DRE já inclui os gastos de cartão até o mês abaixo. Compras de cartão de meses <b>posteriores</b> entram automaticamente no fluxo de caixa (para não duplicar o que já está no DRE). Ajuste só se importar mais meses de histórico.</div>
+    <div class="form">
+      <div class="f"><label>Último mês coberto pelo DRE</label><input type="month" id="cfgCutoff"></div>
+      <div class="f"><label>&nbsp;</label><button class="btn" id="cfgCutoffSave">Salvar</button></div>
+    </div>
+  </div>
+  <div class="card">
     <h3>Importar planilha</h3>
     <div class="hint">Aceita <b>.xlsx</b> com as abas <code>DADOS DRE</code>, <code>BTC</code> e/ou <code>Patrimônio</code>, <b>faturas de cartão</b> (colunas Data · Descrição · Parcela · Valor · Categoria · Cartão) ou <b>.csv</b> exportado por este app. As duplicatas são ignoradas — pode re-subir o arquivo sem medo.</div>
     <div class="bar">
@@ -666,17 +707,19 @@ const DB = {
 
 
 /* ===== Sincronização cartões → fluxo de caixa =====
-   O histórico do DRE já embute os gastos de cartão até o último mês lançado.
-   Para meses posteriores (ainda sem DRE), as compras do cartão entram no fluxo
-   como despesas virtuais, para o saldo do mês não ficar subestimado.
-   Detecção: lançamentos do DRE não têm forma de pagamento (forma vazia). */
-function lastDreMonth(){
-  let last = "";
-  for(const t of DB.tx){ if(!t.forma && t.data.slice(0,7) > last) last = t.data.slice(0,7); }
-  return last || "0000-00";
+   O histórico do DRE já embute os gastos de cartão até um mês de corte fixo.
+   Para meses POSTERIORES a esse corte (ainda sem DRE), as compras do cartão
+   entram no fluxo como despesas virtuais, para o saldo não ficar subestimado.
+   O corte é um valor estável (não é deduzido dos lançamentos), então adicionar
+   receitas/despesas manuais no mês corrente NÃO altera o que é sincronizado. */
+const DRE_CUTOFF_DEFAULT = "2026-06";   // último mês coberto pelo histórico importado
+function dreCutoff(){
+  try{ const v = safeStore.get("fin_dre_cutoff"); if(v && /^\d{4}-\d{2}$/.test(v)) return v; }catch(e){}
+  return DRE_CUTOFF_DEFAULT;
 }
+function setDreCutoff(ym){ if(/^\d{4}-\d{2}$/.test(ym)){ safeStore.set("fin_dre_cutoff", ym); } }
 function ccVirtualTx(){
-  const cut = lastDreMonth();
+  const cut = dreCutoff();
   const out = [];
   for(const c of DB.cc){
     if(c.mes <= cut) continue;                 // já contabilizado no DRE
@@ -756,6 +799,143 @@ function groupFlow(rows, period){
     if(!m.has(key)) m.set(key,{key,label,rec:0,des:0}); const o=m.get(key); o.rec+=r.rec; o.des+=r.des; }
   return [...m.values()].map(o=>({...o,saldo:o.rec-o.des}));
 }
+/* === Mês em curso: realizado + projeção + progresso do dia === */
+function renderMesEmCurso(all){
+  const now = new Date();
+  const ym = now.toISOString().slice(0,7);
+  const cur = all.find(r=>r.ym===ym);
+  const box = $("mesCurso");
+  if(!box) return;
+  if(!cur){ box.style.display="none"; return; }
+  box.style.display = "";
+  // dias
+  const dia = now.getDate();
+  const totalDias = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const fracDia = dia/totalDias;
+  // médias históricas (12 meses anteriores, excluindo o corrente)
+  const idx = all.findIndex(r=>r.ym===ym);
+  const hist = all.slice(Math.max(0,idx-12), idx);
+  const recMed = hist.length? hist.reduce((s,r)=>s+r.rec,0)/hist.length : 0;
+  const desMed = hist.length? hist.reduce((s,r)=>s+r.des,0)/hist.length : 0;
+  // projeção de fechamento: realizado + (média histórica × fração restante)
+  const recProj = cur.rec + Math.max(0, recMed*(1-fracDia));
+  const desProj = cur.des + Math.max(0, desMed*(1-fracDia));
+  const saldoProj = recProj - desProj;
+  const tpProj = recProj? saldoProj/recProj : null;
+  // ritmo diário
+  const gastoDia = cur.des/dia;
+  const gastoDiaMed = desMed/30;
+  const ritmo = gastoDiaMed? (gastoDia-gastoDiaMed)/gastoDiaMed : null;
+  const barPct = Math.min(100, Math.round(fracDia*100));
+  const cls = ritmo==null? "" : (ritmo>0.15? "neg": ritmo<-0.15? "pos": "");
+  box.innerHTML = `
+    <div class="mc-head">
+      <div><h3>${ymLabel(ym)} · em curso</h3>
+        <div class="hint">dia ${dia} de ${totalDias} · projeção usa média dos últimos ${hist.length} meses</div></div>
+      <div class="mc-prog"><div class="mc-bar"><div class="mc-fill" style="width:${barPct}%"></div></div><span class="s">${barPct}% do mês</span></div>
+    </div>
+    <div class="mc-grid">
+      <div class="mc-card">
+        <div class="l">Receitas até hoje</div>
+        <div class="v pos">${fmtBRL0(cur.rec)}</div>
+        <div class="s">projeção fim do mês <b>${fmtBRL0(recProj)}</b></div>
+      </div>
+      <div class="mc-card">
+        <div class="l">Despesas até hoje</div>
+        <div class="v neg">${fmtBRL0(cur.des)}</div>
+        <div class="s">projeção fim do mês <b>${fmtBRL0(desProj)}</b></div>
+      </div>
+      <div class="mc-card">
+        <div class="l">Saldo parcial</div>
+        <div class="v ${cur.saldo>=0?'pos':'neg'}">${fmtBRL0(cur.saldo)}</div>
+        <div class="s">projeção ${saldoProj>=0?'<b class="pos">':'<b class="neg">'}${fmtBRL0(saldoProj)}</b> · poupança ${fmtPct(tpProj)}</div>
+      </div>
+      <div class="mc-card">
+        <div class="l">Ritmo diário</div>
+        <div class="v ${cls}">${fmtBRL0(gastoDia)}<span class="s"> /dia</span></div>
+        <div class="s">média histórica ${fmtBRL0(gastoDiaMed)}/dia ${ritmo==null?"":`· ${ritmo>=0?"▲":"▼"} ${fmtPct(Math.abs(ritmo))}`}</div>
+      </div>
+    </div>`;
+}
+
+/* === Alertas de gastos: categorias do mês corrente vs média histórica === */
+function renderAlertas(all){
+  const box = $("alertas");
+  if(!box) return;
+  const now = new Date();
+  const ym = now.toISOString().slice(0,7);
+  const cur = all.find(r=>r.ym===ym);
+  if(!cur){ box.style.display="none"; return; }
+  const dia = now.getDate();
+  const totalDias = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const fracDia = dia/totalDias;
+  // meses de referência: até 3 anteriores
+  const idx = all.findIndex(r=>r.ym===ym);
+  const refMeses = all.slice(Math.max(0,idx-3), idx).map(r=>r.ym);
+  if(!refMeses.length){ box.style.display="none"; return; }
+  // gastos por categoria no mês vs média histórica
+  const catMes = new Map();
+  const catSemCat = new Map();   // cartão sem categoria: OUTROS/IMPREVISTOS por default
+  for(const t of allTx()){ if(t.tipo!=="DESPESA") continue;
+    if(t.data.slice(0,7)!==ym) continue;
+    // separa compras de cartão SEM categoria explícita (default = OUTROS/IMPREVISTOS)
+    if(t.virtual && (!t.ccId || (DB.cc.find(c=>c.id===t.ccId)?.categoria)==null)){
+      catSemCat.set(t.categoria,(catSemCat.get(t.categoria)||0)+t.valor); continue;
+    }
+    catMes.set(t.categoria,(catMes.get(t.categoria)||0)+t.valor); }
+  const catHist = new Map();  // { cat: [v1,v2,v3] }
+  for(const t of allTx()){ if(t.tipo!=="DESPESA") continue;
+    const ymt = t.data.slice(0,7); if(!refMeses.includes(ymt)) continue;
+    if(!catHist.has(t.categoria)) catHist.set(t.categoria, new Map());
+    const m = catHist.get(t.categoria); m.set(ymt,(m.get(ymt)||0)+t.valor); }
+  const alerts = [];
+  for(const [cat, real] of catMes){
+    const m = catHist.get(cat);
+    const vals = m? refMeses.map(x=>m.get(x)||0) : [];
+    const med = vals.length? vals.reduce((s,v)=>s+v,0)/vals.length : 0;
+    if(med < 50 && real < 200) continue;   // ignora categorias irrelevantes
+    // projeção proporcional: se você já gastou X no dia N/T, esperado até fim é X/frac
+    const projFim = fracDia>0? real/fracDia : real;
+    // sinais:
+    // 1) já ultrapassou a média
+    if(med>0 && real >= med*1.10){
+      alerts.push({cat, sev:"alto", real, med, proj:projFim,
+        msg:`Já ultrapassou a média em ${fmtPct((real-med)/med)}`, cor:"neg"});
+    }
+    // 2) projeção >20% acima da média
+    else if(med>0 && projFim >= med*1.20){
+      alerts.push({cat, sev:"medio", real, med, proj:projFim,
+        msg:`Projeção fim do mês <b>${fmtBRL0(projFim)}</b> (+${fmtPct((projFim-med)/med)} vs média)`, cor:"warn"});
+    }
+    // 3) categoria nova relevante
+    else if(!med && real>=300){
+      alerts.push({cat, sev:"info", real, med:0, proj:projFim,
+        msg:`Categoria sem histórico nos últimos ${refMeses.length} meses`, cor:"info"});
+    }
+  }
+  // ordena por severidade e valor
+  const sev = {alto:0, medio:1, info:2};
+  alerts.sort((a,b)=>sev[a.sev]-sev[b.sev] || b.real-a.real);
+  // nota informativa: compras de cartão ainda por categorizar
+  const semCatTotal = [...catSemCat.values()].reduce((s,v)=>s+v,0);
+  const nCartao = allTx().filter(t=>t.virtual && t.data.slice(0,7)===ym && (!t.ccId || (DB.cc.find(c=>c.id===t.ccId)?.categoria)==null)).length;
+  const notaCartao = nCartao? `<p class="al-tip">💡 <b>${nCartao}</b> compra(s) de cartão sem categoria (<b>${fmtBRL0(semCatTotal)}</b>) — categorize na aba Cartões para alertas mais precisos.</p>` : "";
+  if(!alerts.length){
+    box.style.display="";
+    box.innerHTML = `<h3>Alertas de gastos</h3><div class="hint">${ymLabel(ym)} · comparado à média de ${refMeses.length} mês(es) anterior(es)</div>
+      <p class="al-ok">✓ Nenhuma categoria acima do esperado.</p>${notaCartao}`;
+    return;
+  }
+  box.style.display="";
+  box.innerHTML = `<h3>Alertas de gastos</h3><div class="hint">${ymLabel(ym)} · comparado à média de ${refMeses.length} mês(es) anterior(es)</div>
+    <div class="al-list">${alerts.slice(0,6).map(a=>`
+      <div class="al al-${a.cor}">
+        <div class="al-cat"><span class="al-dot"></span>${a.cat}</div>
+        <div class="al-msg">${a.msg}</div>
+        <div class="al-num">${fmtBRL0(a.real)}<span class="s"> ${a.med? "vs média "+fmtBRL0(a.med) : "sem histórico"}</span></div>
+      </div>`).join("")}</div>${notaCartao}`;
+}
+
 function renderHome(){
   const all = monthlyAgg();
   if(!all.length) return;
@@ -783,6 +963,9 @@ function renderHome(){
     <div class="kpi"><div class="l">Poupança 12m</div><div class="v ${tp12>=0?'pos':'neg'}">${fmtPct(tp12)}</div><div class="s">${fmtBRL0(rec12-des12)} guardados</div></div>
     <div class="kpi"><div class="l">Gasto médio mensal 12m</div><div class="v">${fmtBRL0(des12/12)}</div><div class="s">receita média ${fmtBRL0(rec12/12)}</div></div>`;
   $("homeCount").textContent = `${DB.tx.length.toLocaleString("pt-BR")} lançamentos · ${all[0].ym} → ${all[all.length-1].ym}`;
+
+  renderMesEmCurso(all);
+  renderAlertas(all);
 
   const g = groupFlow(rows, homeGroup);
   const labels = g.map(x=>x.label);
@@ -1639,6 +1822,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(!confirm("Excluir esta ordem?")) return;
     try{ await DB.delBtc(id); renderAll(); }catch(err){ toast("Erro: "+err.message); }
   });
+
+  // configuração do corte de sincronização de cartões
+  if($("cfgCutoff")){ $("cfgCutoff").value = dreCutoff();
+    $("cfgCutoffSave").onclick = ()=>{ const v=$("cfgCutoff").value;
+      if(!/^\d{4}-\d{2}$/.test(v)) return toast("Escolha um mês válido.");
+      setDreCutoff(v); toast("Corte atualizado para "+v+"."); renderAll(); }; }
 
   // cartões
   $("ccCard").onchange = renderCartoes;
