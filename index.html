@@ -252,6 +252,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
   <button data-p="anal">Análises H/V</button>
   <button data-p="pat">Patrimônio</button>
   <button data-p="btc">Bitcoin</button>
+  <button data-p="liv">Livros</button>
   <button data-p="cfg">Configurações</button>
 </nav>
 
@@ -483,6 +484,83 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
   </div>
 </section>
 
+<!-- ============ LIVROS ============ -->
+<section class="page" id="p-liv">
+  <h2>Livros</h2>
+  <p class="sub">Controle das leituras, temas e próximas indicações. Páginas = 0 identifica audiolivro.</p>
+
+  <div class="card">
+    <h3>Novo livro</h3>
+    <div class="hint">Data pode ser o dia (ou 1º do mês) em que terminou. Tema livre — o app agrupa por texto.</div>
+    <div class="form">
+      <div class="f"><label>Título</label><input type="text" id="livTitulo" placeholder="Ex.: Sapiens"></div>
+      <div class="f"><label>Autor</label><input type="text" id="livAutor" placeholder="Ex.: Yuval N. Harari"></div>
+      <div class="f"><label>Tema</label><input type="text" id="livTema" list="livTemasDL" placeholder="Ex.: HISTÓRIA"><datalist id="livTemasDL"></datalist></div>
+      <div class="f"><label>Páginas</label><input type="number" id="livPag" min="0" step="1" placeholder="0 = audiolivro"></div>
+      <div class="f"><label>Data</label><input type="date" id="livData"></div>
+    </div>
+    <button class="btn" id="livAdd">Adicionar</button>
+  </div>
+
+  <div class="kpis" id="livKpis"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Livros por tema</h3>
+      <div class="hint">Distribuição no período histórico</div>
+      <div class="chartbox short"><canvas id="chLivTema"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Próximas leituras</h3>
+      <div class="hint" id="livWlHint">Sua wishlist</div>
+      <div class="form" style="margin-bottom:8px">
+        <div class="f"><label>Título</label><input type="text" id="livWlTitulo" placeholder="Novo livro na fila"></div>
+        <div class="f"><label>Autor</label><input type="text" id="livWlAutor" placeholder="opcional"></div>
+        <div class="f"><label>&nbsp;</label><button class="btn" id="livWlAdd">Adicionar</button></div>
+      </div>
+      <div class="twrap" style="max-height:320px;overflow-y:auto"><table id="tblLivWl"></table></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Ritmo de leitura</h3>
+    <div class="bar" style="gap:12px;flex-wrap:wrap">
+      <div class="seg" id="livMetric"><button data-v="livros" class="on">Livros</button><button data-v="paginas">Páginas</button></div>
+      <div class="seg" id="livGroup"><button data-v="mes" class="on">Mês</button><button data-v="tri">Trimestre</button><button data-v="sem">Semestre</button><button data-v="ano">Ano</button></div>
+      <select id="livRange">
+        <option value="24" selected>Últimos 24 períodos</option>
+        <option value="12">Últimos 12</option>
+        <option value="36">Últimos 36</option>
+        <option value="0">Todo o histórico</option>
+      </select>
+    </div>
+    <div class="chartbox tall"><canvas id="chLivMes"></canvas></div>
+  </div>
+
+  <div class="grid31">
+    <div class="card">
+      <h3 id="livCumTitle">Acumulado</h3>
+      <div class="hint">Total desde o início do histórico</div>
+      <div class="chartbox short"><canvas id="chLivCum"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Autores mais lidos</h3>
+      <div class="hint">Top 8</div>
+      <div class="twrap" style="max-height:280px;overflow-y:auto"><table id="tblLivAut"></table></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Todos os livros lidos</h3>
+    <div class="bar" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <select id="livFAno" style="min-width:120px"></select>
+      <select id="livFTema" style="min-width:160px"></select>
+      <input type="text" id="livFBusca" placeholder="Buscar título ou autor…" style="flex:1;min-width:200px">
+    </div>
+    <div class="twrap" style="max-height:520px;overflow-y:auto"><table id="tblLiv"></table></div>
+  </div>
+</section>
+
 <!-- ============ CONFIG ============ -->
 <section class="page" id="p-cfg">
   <h2>Configurações</h2>
@@ -613,7 +691,7 @@ const PAT_CLASSES = [
 /* ================= data layer ================= */
 const DB = {
   mode: "local", sb: null, session: null,
-  tx: [], btc: [], pat: [], cc: [],
+  tx: [], btc: [], pat: [], cc: [], liv: [], livWl: [],
   loadLocal(){
     const base = decodeSeed();
     let ov = {addTx:[],delTx:[],editTx:{},addBtc:[],delBtc:[],addPat:[],delPat:[]};
@@ -630,6 +708,8 @@ const DB = {
     this.tx.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
     this.btc.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
     this.pat.sort((a,b)=>a.mes<b.mes?-1:a.mes>b.mes?1:0);
+    (this.liv||[]).sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
+    (this.livWl||[]).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
   },
   async fetchAll(table, orderCol){
     const rows = []; const page = 1000;
@@ -652,6 +732,12 @@ const DB = {
       this.cc = cc.map(r=>({...r, mes:String(r.mes).slice(0,7), valor:+r.valor,
         parcela:r.parcela==null?null:+r.parcela, parcelas:r.parcelas==null?null:+r.parcelas}));
     }catch(e){ this.cc = []; this.ccMissing = true; }
+    try{ const liv = await this.fetchAll("livros","data");
+      this.liv = liv.map(r=>({...r, paginas:+r.paginas||0}));
+    }catch(e){ this.liv = []; this.livMissing = true; }
+    try{ const wl = await this.fetchAll("livros_wishlist","ordem");
+      this.livWl = wl;
+    }catch(e){ this.livWl = []; }
     this.tx = t.map(r=>({...r, valor:+r.valor}));
     this.btc = b.map(r=>({...r, quantidade:+r.quantidade, preco:r.preco==null?null:+r.preco, total:r.total==null?null:+r.total}));
     this.pat = p.map(r=>{ const o={...r, mes:String(r.mes).slice(0,7)}; PAT_CLASSES.forEach(([k])=>o[k]=+(r[k]||0)); o.rentabilidade=r.rentabilidade==null?null:+r.rentabilidade; if(!o.patrimonio) o.patrimonio=PAT_CLASSES.reduce((s,[k])=>s+(o[k]||0),0); return o; });
@@ -705,6 +791,23 @@ const DB = {
       parcela:data.parcela==null?null:+data.parcela, parcelas:data.parcelas==null?null:+data.parcelas});
   },
   async delCC(id){ const {error}=await this.sb.from("cartao_compras").delete().eq("id",id); if(error) throw error; this.cc=this.cc.filter(x=>x.id!==id); },
+
+  async addLiv(row){ const {data,error}=await this.sb.from("livros").insert(row).select().single();
+    if(error) throw error; this.liv.push({...data, paginas:+data.paginas||0}); this.sort(); },
+  async updateLiv(id, patch){ const {data,error}=await this.sb.from("livros").update(patch).eq("id",id).select().single();
+    if(error) throw error; const l=this.liv.find(x=>x.id===id); if(l) Object.assign(l, {...data, paginas:+data.paginas||0}); this.sort(); },
+  async delLiv(id){ const {error}=await this.sb.from("livros").delete().eq("id",id);
+    if(error) throw error; this.liv=this.liv.filter(x=>x.id!==id); },
+  async addWl(row){ const {data,error}=await this.sb.from("livros_wishlist").insert(row).select().single();
+    if(error) throw error; this.livWl.push(data); this.sort(); },
+  async delWl(id){ const {error}=await this.sb.from("livros_wishlist").delete().eq("id",id);
+    if(error) throw error; this.livWl=this.livWl.filter(x=>x.id!==id); },
+  async promoteWl(id){
+    // move da wishlist para lidos com data de hoje
+    const w = this.livWl.find(x=>x.id===id); if(!w) throw new Error("Item não encontrado.");
+    await this.addLiv({data: todayISO(), titulo:w.titulo, autor:w.autor||null, tema:null, paginas:0});
+    await this.delWl(id);
+  },
   async addPat(t){ if(this.mode==="supabase"){ const row={...t, mes:t.mes+"-01"}; const {data,error}=await this.sb.from("patrimonio").insert(row).select().single(); if(error) throw error; const o={...data, mes:String(data.mes).slice(0,7)}; PAT_CLASSES.forEach(([k])=>o[k]=+(o[k]||0)); this.pat.push(o); } else { t.id=uid(); this.pat.push(t); this._ov.addPat.push(t); this.saveLocal(); } this.sort(); },
   async delPat(id){ if(this.mode==="supabase"){ const {error}=await this.sb.from("patrimonio").delete().eq("id",id); if(error) throw error; } else { this._ov.addPat=this._ov.addPat.filter(x=>x.id!==id); if(String(id).startsWith("s_")) this._ov.delPat.push(id); this.saveLocal(); } this.pat=this.pat.filter(x=>x.id!==id); },
 };
@@ -1373,6 +1476,179 @@ function ccUnified(){
 const CC_COLORS = {"Itaú":"#B26A12","XP":"#1F1D1A","Inter":"#B06A85","Nubank":"#7D6B9E","Swile":"#177E51","PicPay":"#6C8A3A","Pão de Açúcar":"#C0394B","Mercado Pago":"#4E8A99"};
 let ccFilterCard = "";
 let ccRange = 24;   // meses exibidos nos gráficos (0 = tudo)
+
+/* ================= LIVROS ================= */
+const LIV_COLORS = ["#C0394B","#3D5A80","#B26A12","#177E51","#8E7BFF","#1F1D1A","#4FC3D9","#F06CA8","#9CD326","#C0714F","#4E8A99","#B06A85","#7D6B9E","#6C8A3A","#C08014"];
+let livMetric = "livros";   // livros | paginas
+let livGroup = "mes";       // mes | tri | sem | ano
+let livSort = {col:"data", dir:-1};
+
+function livGroupKey(dateStr){
+  const [y,m] = dateStr.split("-");
+  const mi = +m;
+  if(livGroup==="mes") return {k:`${y}-${m}`, label:`${MESES[mi-1]}/${y.slice(-2)}`};
+  if(livGroup==="tri"){ const q=Math.ceil(mi/3); return {k:`${y}-T${q}`, label:`T${q}/${y.slice(-2)}`}; }
+  if(livGroup==="sem"){ const s=mi<=6?1:2; return {k:`${y}-S${s}`, label:`S${s}/${y.slice(-2)}`}; }
+  return {k:y, label:y};
+}
+
+function renderLivros(){
+  if($("livMissing")) $("livMissing").style.display = DB.livMissing ? "" : "none";
+  const livros = DB.liv || [];
+  const wl = DB.livWl || [];
+  // datalist de temas
+  const temas = [...new Set(livros.map(l=>l.tema).filter(Boolean))].sort();
+  $("livTemasDL").innerHTML = temas.map(t=>`<option value="${t}">`).join("");
+
+  // KPIs
+  const nowY = String(new Date().getFullYear());
+  const doAno = livros.filter(l=>l.data.slice(0,4)===nowY);
+  const pagAno = doAno.reduce((s,l)=>s+(l.paginas||0),0);
+  const audioAno = doAno.filter(l=>(l.paginas||0)===0).length;
+  const totalP = livros.reduce((s,l)=>s+(l.paginas||0),0);
+  const temaTop = temas.length? temas.map(t=>[t, livros.filter(l=>l.tema===t).length]).sort((a,b)=>b[1]-a[1])[0] : null;
+  const ritmo = doAno.length ? (doAno.length / Math.max(1, (new Date().getMonth()+1))) : 0;
+  $("livKpis").innerHTML = `
+    <div class="kpi"><div class="l">Lidos em ${nowY}</div><div class="v pos">${doAno.length}</div><div class="s">${pagAno.toLocaleString("pt-BR")} páginas · ${audioAno} audiolivro${audioAno===1?"":"s"}</div></div>
+    <div class="kpi"><div class="l">Ritmo ${nowY}</div><div class="v">${ritmo.toFixed(1)}<span class="s"> /mês</span></div><div class="s">projeção fim do ano: ${Math.round(ritmo*12)} livros</div></div>
+    <div class="kpi"><div class="l">Total histórico</div><div class="v">${livros.length}</div><div class="s">${totalP.toLocaleString("pt-BR")} páginas em ${temas.length} temas</div></div>
+    <div class="kpi"><div class="l">Tema mais lido</div><div class="v" style="font-size:1.1rem">${temaTop?temaTop[0]:"—"}</div><div class="s">${temaTop?temaTop[1]+" livros":"—"}</div></div>
+    <div class="kpi"><div class="l">Próximas leituras</div><div class="v blue">${wl.length}</div><div class="s">na fila</div></div>`;
+
+  if(!livros.length){
+    ["chLivTema","chLivMes","chLivCum"].forEach(id=>{ if(charts[id]){ charts[id].destroy(); delete charts[id]; } });
+    $("tblLiv").innerHTML = `<thead><tr><th>Data</th><th>Título</th><th>Autor</th><th>Tema</th><th class="num">Páginas</th><th></th></tr></thead><tbody><tr><td colspan="6" class="muted">Nenhum livro registrado ainda.</td></tr></tbody>`;
+    $("tblLivAut").innerHTML = `<thead><tr><th>Autor</th><th class="num">Livros</th></tr></thead><tbody><tr><td colspan="2" class="muted">—</td></tr></tbody>`;
+    renderLivWl();
+    return;
+  }
+
+  // pizza de temas
+  const temaCount = temas.map(t=>[t, livros.filter(l=>l.tema===t).length]).sort((a,b)=>b[1]-a[1]);
+  const topN = 12;
+  const pieData = temaCount.length>topN
+    ? [...temaCount.slice(0,topN), ["Outros", temaCount.slice(topN).reduce((s,x)=>s+x[1],0)]]
+    : temaCount;
+  mkChart("chLivTema",{type:"doughnut",
+    data:{labels:pieData.map(x=>x[0]),
+      datasets:[{data:pieData.map(x=>x[1]),backgroundColor:pieData.map((_,i)=>LIV_COLORS[i%LIV_COLORS.length]),borderColor:"#FFFFFF",borderWidth:2}]},
+    options:{maintainAspectRatio:false,cutout:"58%",
+      plugins:{legend:{position:"right",labels:{boxWidth:9,font:{size:10}}},
+        tooltip:{callbacks:{label:c=>` ${c.label}: ${c.parsed} livros (${fmtPct(c.parsed/livros.length)})`}}}}});
+
+  // agrupamento por período
+  const agg = new Map();
+  for(const l of livros){
+    const {k,label} = livGroupKey(l.data);
+    if(!agg.has(k)) agg.set(k, {k, label, livros:0, paginas:0});
+    const g = agg.get(k); g.livros++; g.paginas += (l.paginas||0);
+  }
+  const rows = [...agg.values()].sort((a,b)=>a.k<b.k?-1:1);
+  const n = +$("livRange").value;
+  const shown = n? rows.slice(-n) : rows;
+  const metric = livMetric;
+  const label = metric==="livros" ? "Livros" : "Páginas";
+  const barW = livGroup==="mes" ? 3 : 4;
+  mkChart("chLivMes",{
+    data:{labels:shown.map(x=>x.label),
+      datasets:[{type:"bar", label, data:shown.map(x=>x[metric]),
+        backgroundColor:"rgba(126,86,50,.72)", borderRadius:barW}]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:livGroup==="mes"?24:40}},
+              y:{beginAtZero:true, ticks:{callback: v=> metric==="livros"? v : moneyTick(v)}}},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>` ${label}: ${c.parsed.y.toLocaleString("pt-BR")}`}}}}});
+
+  // acumulado
+  let acc=0; const cum = shown.map(x=>acc+=x[metric]);
+  $("livCumTitle").textContent = metric==="livros" ? "Livros acumulados" : "Páginas acumuladas";
+  mkChart("chLivCum",{type:"line",
+    data:{labels:shown.map(x=>x.label),
+      datasets:[{label:"Acumulado", data:cum, borderColor:"#7E5632",backgroundColor:"rgba(126,86,50,.10)",
+        fill:true, tension:.25, pointRadius:0, pointHoverRadius:4, borderWidth:2}]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},
+              y:{ticks:{callback: v=> metric==="livros"? v : moneyTick(v)}}},
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>` ${label} acumulados: ${c.parsed.y.toLocaleString("pt-BR")}`}}}}});
+
+  // autores top
+  const autMap = new Map();
+  for(const l of livros){ const a = (l.autor||"").trim(); if(!a) continue; autMap.set(a,(autMap.get(a)||0)+1); }
+  const autTop = [...autMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8);
+  $("tblLivAut").innerHTML = `<thead><tr><th>Autor</th><th class="num">Livros</th></tr></thead><tbody>`+
+    (autTop.length? autTop.map(([a,n])=>`<tr><td>${a}</td><td class="num"><b>${n}</b></td></tr>`).join("")
+     : `<tr><td colspan="2" class="muted">—</td></tr>`)+"</tbody>";
+
+  // filtros da tabela
+  const anos = [...new Set(livros.map(l=>l.data.slice(0,4)))].sort().reverse();
+  const curFAno = $("livFAno").value;
+  const curFTema = $("livFTema").value;
+  const isFresh = !$("livFAno").dataset.init;
+  $("livFAno").innerHTML = `<option value="">Todos os anos</option>`+anos.map(a=>`<option>${a}</option>`).join("");
+  $("livFTema").innerHTML = `<option value="">Todos os temas</option>`+temas.map(t=>`<option>${t}</option>`).join("");
+  if(isFresh && anos.includes(nowY)){ $("livFAno").value = nowY; $("livFAno").dataset.init="1"; }
+  else { if(curFAno) $("livFAno").value = curFAno; if(curFTema) $("livFTema").value = curFTema; }
+
+  const y = $("livFAno").value, tf = $("livFTema").value, q = ($("livFBusca").value||"").trim().toLowerCase();
+  let filt = livros.filter(l =>
+    (!y || l.data.slice(0,4)===y) &&
+    (!tf || l.tema===tf) &&
+    (!q || (l.titulo||"").toLowerCase().includes(q) || (l.autor||"").toLowerCase().includes(q)));
+
+  // ordenação clicável
+  const kv = l => {
+    if(livSort.col==="data") return l.data;
+    if(livSort.col==="titulo") return (l.titulo||"").toLowerCase();
+    if(livSort.col==="autor") return (l.autor||"").toLowerCase();
+    if(livSort.col==="tema") return (l.tema||"").toLowerCase();
+    if(livSort.col==="paginas") return l.paginas||0;
+    return "";
+  };
+  filt.sort((a,b)=>{ const A=kv(a),B=kv(b); return A<B?-livSort.dir:A>B?livSort.dir:0; });
+  const livTh = (c,l,n)=>`<th class="sortable${n?' num':''}${livSort.col===c?' active':''}" data-livsort="${c}">${l}<span class="s-arr">${livSort.col===c?(livSort.dir===-1?" ▼":" ▲"):""}</span></th>`;
+  const fmtP = p => p===0 ? `<span class="tag" style="background:#EFE8DA;color:#7E5632">audio</span>` : p.toLocaleString("pt-BR");
+  const fmtD = d => d.split("-").reverse().join("/");
+  $("tblLiv").innerHTML = `<thead><tr>${livTh("data","Data")}${livTh("titulo","Título")}${livTh("autor","Autor")}${livTh("tema","Tema")}${livTh("paginas","Páginas",true)}<th style="width:76px"></th></tr></thead><tbody>`+
+    (filt.length? filt.map(l=> l.id===livEditId ? livEditRow(l) : `<tr><td>${fmtD(l.data)}</td><td>${l.titulo}</td><td>${l.autor||'<span class="muted">—</span>'}</td><td>${l.tema||'<span class="muted">—</span>'}</td><td class="num">${fmtP(l.paginas)}</td><td class="acts"><button class="ed" data-editliv="${l.id}" title="Editar">✎</button><button class="del" data-delliv="${l.id}" title="Excluir">✕</button></td></tr>`).join("")
+     : `<tr><td colspan="6" class="muted">Nenhum resultado no filtro.</td></tr>`)+"</tbody>";
+
+  renderLivWl();
+}
+
+let livEditId = null;
+function livEditRow(l){
+  const temas = [...new Set(DB.liv.map(x=>x.tema).filter(Boolean))].sort();
+  return `<tr class="editing" data-livrow="${l.id}">
+    <td><input type="date" class="li" data-k="data" value="${l.data}"></td>
+    <td><input type="text" class="li" data-k="titulo" value="${(l.titulo||"").replace(/"/g,"&quot;")}"></td>
+    <td><input type="text" class="li" data-k="autor" value="${(l.autor||"").replace(/"/g,"&quot;")}"></td>
+    <td><input type="text" class="li" data-k="tema" list="livTemasDL" value="${(l.tema||"").replace(/"/g,"&quot;")}"></td>
+    <td class="num"><input type="number" class="li" data-k="paginas" min="0" step="1" value="${l.paginas||0}" style="text-align:right"></td>
+    <td class="acts"><button class="ed save" data-saveliv="${l.id}" title="Salvar">✓</button><button class="del" data-cancelliv="1" title="Cancelar">✕</button></td>
+  </tr>`;
+}
+async function saveLivEdit(id){
+  const row = document.querySelector(`tr[data-livrow="${id}"]`); if(!row) return;
+  const g = k => row.querySelector(`.li[data-k="${k}"]`).value;
+  const titulo = g("titulo").trim(); if(!titulo) return toast("Informe o título.");
+  const data = g("data"); if(!data) return toast("Informe a data.");
+  const paginas = parseInt(g("paginas"))||0;
+  try{
+    await DB.updateLiv(id, {data, titulo, autor:g("autor").trim()||null, tema:(g("tema").trim().toUpperCase()||null), paginas});
+    livEditId=null; toast("Livro atualizado."); renderLivros();
+  }catch(e){ toast("Erro: "+(e.message||e)); }
+}
+
+function renderLivWl(){
+  const wl = DB.livWl || [];
+  $("tblLivWl").innerHTML = `<thead><tr><th>Título</th><th>Autor</th><th style="width:100px"></th></tr></thead><tbody>`+
+    (wl.length? wl.map(w=>`<tr><td>${w.titulo}</td><td>${w.autor||'<span class="muted">—</span>'}</td><td class="acts"><button class="ed" data-promotewl="${w.id}" title="Marcar como lido">✓</button><button class="del" data-delwl="${w.id}" title="Remover">✕</button></td></tr>`).join("")
+     : `<tr><td colspan="3" class="muted">Nenhum livro na fila.</td></tr>`)+"</tbody>";
+  $("livWlHint").textContent = wl.length ? `${wl.length} na fila` : "Sua wishlist";
+}
+
+
 function renderCartoes(){
   const all = ccUnified();
   if($("ccMissing")) $("ccMissing").style.display = DB.ccMissing ? "" : "none";
@@ -1779,7 +2055,7 @@ function exportPat(){ download("patrimonio.csv", "\uFEFF"+csv([["mes",...PAT_CLA
 function exportJson(){ download("backup_financeiro.json", JSON.stringify({tx:DB.tx,btc:DB.btc,pat:DB.pat},null,1), "application/json"); }
 
 /* ================= render root ================= */
-function renderAll(){ refreshVirtual(); renderTape(); renderHome(); renderLanc(); renderAnal(); renderPat(); renderBtc(); renderCartoes(); }
+function renderAll(){ refreshVirtual(); renderTape(); renderHome(); renderLanc(); renderAnal(); renderPat(); renderBtc(); renderCartoes(); renderLivros(); }
 
 /* ================= events ================= */
 document.addEventListener("DOMContentLoaded", ()=>{
@@ -1916,6 +2192,71 @@ document.addEventListener("DOMContentLoaded", ()=>{
       catch(err){ toast("Erro: "+err.message); }
     }
   });
+
+  // livros
+  $("livAdd").onclick = async ()=>{
+    const titulo = $("livTitulo").value.trim();
+    const data = $("livData").value || todayISO();
+    if(!titulo) return toast("Informe o título.");
+    try{
+      await DB.addLiv({
+        data, titulo,
+        autor: $("livAutor").value.trim()||null,
+        tema: ($("livTema").value.trim().toUpperCase())||null,
+        paginas: parseInt($("livPag").value)||0
+      });
+      $("livTitulo").value=$("livAutor").value=$("livTema").value=$("livPag").value="";
+      toast("Livro adicionado."); renderLivros();
+    }catch(e){ toast("Erro: "+(e.message||e)); }
+  };
+  $("livWlAdd").onclick = async ()=>{
+    const titulo = $("livWlTitulo").value.trim(); if(!titulo) return toast("Informe o título.");
+    const ordem = (DB.livWl||[]).length;
+    try{
+      await DB.addWl({titulo, autor: $("livWlAutor").value.trim()||null, ordem});
+      $("livWlTitulo").value=$("livWlAutor").value=""; toast("Adicionado à fila."); renderLivros();
+    }catch(e){ toast("Erro: "+(e.message||e)); }
+  };
+  $("livMetric").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return;
+    livMetric = b.dataset.v;
+    $("livMetric").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); renderLivros(); });
+  $("livGroup").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return;
+    livGroup = b.dataset.v;
+    $("livGroup").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); renderLivros(); });
+  $("livRange").onchange = renderLivros;
+  $("livFAno").onchange = renderLivros;
+  $("livFTema").onchange = renderLivros;
+  $("livFBusca").oninput = renderLivros;
+  $("tblLiv").addEventListener("click", async e=>{
+    const th = e.target.closest("th.sortable");
+    if(th){ const c=th.dataset.livsort;
+      livSort.dir = (livSort.col===c ? -livSort.dir : (c==="data"||c==="paginas" ? -1 : 1));
+      livSort.col = c; renderLivros(); return; }
+    const b = e.target.closest("button"); if(!b) return;
+    if(b.dataset.editliv){ livEditId=b.dataset.editliv; renderLivros(); return; }
+    if(b.dataset.cancelliv){ livEditId=null; renderLivros(); return; }
+    if(b.dataset.saveliv){ await saveLivEdit(b.dataset.saveliv); return; }
+    if(b.dataset.delliv){
+      if(!confirm("Excluir este livro do histórico?")) return;
+      try{ await DB.delLiv(b.dataset.delliv); if(livEditId===b.dataset.delliv) livEditId=null; renderLivros(); }
+      catch(err){ toast("Erro: "+err.message); }
+    }
+  });
+  $("tblLivWl").addEventListener("click", async e=>{
+    const b = e.target.closest("button"); if(!b) return;
+    if(b.dataset.promotewl){
+      if(!confirm("Marcar como lido e mover para a lista de leituras?")) return;
+      try{ await DB.promoteWl(b.dataset.promotewl); toast("Movido para lidos."); renderLivros(); }
+      catch(err){ toast("Erro: "+err.message); }
+    }
+    if(b.dataset.delwl){
+      if(!confirm("Remover da fila?")) return;
+      try{ await DB.delWl(b.dataset.delwl); renderLivros(); }
+      catch(err){ toast("Erro: "+err.message); }
+    }
+  });
+  // data padrão
+  if($("livData")) $("livData").value = todayISO();
 
   // config
   $("modeSeg").addEventListener("click", e=>{
