@@ -667,7 +667,7 @@ function decodeSeed(){
   return {tx, btc, pat};
 }
 const FORMAS = ["Cartão de Crédito","Pix","Boleto","Dinheiro"];
-const CARTOES_BASE = ["Pão de Açúcar","XP","Mercado Pago","Nubank","Inter","PicPay"];
+const CARTOES_BASE = ["Itaú","XP","Mercado Pago","Nubank","Inter","PicPay","Swile"];
 function cartoesAll(){
   let extra=[]; try{ extra=JSON.parse(safeStore.get("fin_cartoes")||"[]"); }catch(e){}
   const fromData = new Set([...DB.cc.map(c=>c.cartao), ...DB.tx.filter(t=>t.cartao).map(t=>t.cartao)]);
@@ -1473,7 +1473,7 @@ function ccUnified(){
   });
   return [...hist, ...novo];
 }
-const CC_COLORS = {"Itaú":"#B26A12","XP":"#1F1D1A","Inter":"#B06A85","Nubank":"#7D6B9E","Swile":"#177E51","PicPay":"#6C8A3A","Pão de Açúcar":"#C0394B","Mercado Pago":"#4E8A99"};
+const CC_COLORS = {"Itaú":"#D4710A","XP":"#1A1A1A","Nubank":"#8B2CB5","Mercado Pago":"#2D7DD2","Swile":"#D4A017","Inter":"#F28C38","PicPay":"#21C25E"};
 let ccFilterCard = "";
 let ccRange = 24;   // meses exibidos nos gráficos (0 = tudo)
 
