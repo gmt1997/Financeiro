@@ -1081,13 +1081,44 @@ function renderHome(){
   const g = groupFlow(rows, homeGroup);
   const labels = g.map(x=>x.label);
   const barW = homeGroup==="mes" ? 3 : 4;
+  // médias do período visível
+  const nG = g.length || 1;
+  const avgRec = g.reduce((s,r)=>s+r.rec,0)/nG;
+  const avgDes = g.reduce((s,r)=>s+r.des,0)/nG;
+  const avgSaldo = g.reduce((s,r)=>s+r.saldo,0)/nG;
+  // meses no agrupamento (para média mensal no tooltip quando agrupa por ano/semestre/trimestre)
+  const mesesPorGrupo = homeGroup==="mes"?1 : homeGroup==="tri"?3 : homeGroup==="sem"?6 : 12;
+  const isAgrupado = mesesPorGrupo > 1;
   mkChart("chFlow",{ data:{ labels, datasets:[
       {type:"bar",label:"Receitas",data:g.map(r=>r.rec),backgroundColor:"rgba(23,126,81,.72)",borderRadius:barW,order:2},
       {type:"bar",label:"Despesas",data:g.map(r=>-r.des),backgroundColor:"rgba(192,57,75,.62)",borderRadius:barW,order:2},
-      {type:"line",label:"Saldo",data:g.map(r=>r.saldo),borderColor:"#1F1D1A",backgroundColor:"#1F1D1A",tension:.3,pointRadius:homeGroup==="mes"?2:3,borderWidth:2,order:1}]},
+      {type:"line",label:"Saldo",data:g.map(r=>r.saldo),borderColor:"#1F1D1A",backgroundColor:"#1F1D1A",tension:.3,pointRadius:homeGroup==="mes"?2:3,borderWidth:2,order:1},
+      {type:"line",label:"Média Receitas",data:g.map(()=>avgRec),borderColor:"rgba(23,126,81,.45)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0,hidden:false},
+      {type:"line",label:"Média Despesas",data:g.map(()=>-avgDes),borderColor:"rgba(192,57,75,.45)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0,hidden:false},
+      {type:"line",label:"Média Saldo",data:g.map(()=>avgSaldo),borderColor:"rgba(31,29,26,.35)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0,hidden:false}
+    ]},
     options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
       scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:homeGroup==="mes"?24:40}},y:{ticks:{callback:moneyTick}}},
-      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtBRL(Math.abs(c.parsed.y))}`}}}}});
+      plugins:{legend:{labels:{boxWidth:10,filter:item=>!item.text.startsWith("Média")}},
+        tooltip:{callbacks:{
+          label:c=>{
+            if(c.dataset.label.startsWith("Média")) return null;   // esconde médias do tooltip
+            return ` ${c.dataset.label}: ${fmtBRL(Math.abs(c.parsed.y))}`;
+          },
+          afterBody:items=>{
+            const i = items[0]?.dataIndex;
+            if(i==null) return "";
+            const r = g[i];
+            const lines = [];
+            if(isAgrupado){
+              lines.push("", `  Média mensal:`);
+              lines.push(`    Receita: ${fmtBRL(r.rec/mesesPorGrupo)}`);
+              lines.push(`    Despesa: ${fmtBRL(r.des/mesesPorGrupo)}`);
+              lines.push(`    Saldo:   ${fmtBRL(r.saldo/mesesPorGrupo)}`);
+            }
+            return lines.join("\n");
+          }
+        }}}}});
 
   let acc=0; const cum = g.map(r=>acc+=r.saldo);
   mkChart("chCum",{type:"line",data:{labels,datasets:[{label:"Acumulado",data:cum,borderColor:"#3D5A80",backgroundColor:"rgba(61,90,128,.10)",fill:true,tension:.3,pointRadius:0,pointHoverRadius:4,pointHoverBackgroundColor:"#3D5A80",pointHoverBorderColor:"#fff",pointHoverBorderWidth:2,borderWidth:2}]},
