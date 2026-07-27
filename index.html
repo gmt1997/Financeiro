@@ -1056,20 +1056,23 @@ function renderHome(){
   sel.value = rows.some(r=>r.ym===cur) ? cur : rows[rows.length-1].ym;
   const mSel = rows.find(r=>r.ym===sel.value) || rows[rows.length-1];
 
-  // KPIs
-  const last12 = all.slice(-12);
-  const rec12 = last12.reduce((s,r)=>s+r.rec,0), des12 = last12.reduce((s,r)=>s+r.des,0);
+  // KPIs — médias baseadas no período selecionado (rows), não fixo 12m
+  const nPer = rows.length || 1;
+  const recPer = rows.reduce((s,r)=>s+r.rec,0), desPer = rows.reduce((s,r)=>s+r.des,0);
+  const saldoPer = recPer - desPer;
+  const recMed = recPer/nPer, desMed = desPer/nPer, saldoMed = saldoPer/nPer;
   const tp = mSel.rec? (mSel.saldo/mSel.rec) : null;
-  const tp12 = rec12? (rec12-des12)/rec12 : null;
+  const tpPer = recPer? saldoPer/recPer : null;
   const idx = all.findIndex(r=>r.ym===mSel.ym);
   const prev = idx>0? all[idx-1] : null;
   const dDes = prev && prev.des ? (mSel.des-prev.des)/prev.des : null;
+  const perLabel = n? `${n}m` : "histórico";
   $("homeKpis").innerHTML = `
-    <div class="kpi"><div class="l">Receitas · ${ymLabel(mSel.ym)}</div><div class="v pos">${fmtBRL0(mSel.rec)}</div><div class="s">média 12m ${fmtBRL0(rec12/12)}</div></div>
-    <div class="kpi"><div class="l">Despesas · ${ymLabel(mSel.ym)}</div><div class="v neg">${fmtBRL0(mSel.des)}</div><div class="s">${dDes==null?"—":(dDes>=0?"▲ ":"▼ ")+fmtPct(Math.abs(dDes))} vs mês anterior</div></div>
-    <div class="kpi"><div class="l">Saldo · ${ymLabel(mSel.ym)}</div><div class="v ${mSel.saldo>=0?'pos':'neg'}">${fmtBRL0(mSel.saldo)}</div><div class="s">taxa de poupança ${fmtPct(tp)}</div></div>
-    <div class="kpi"><div class="l">Poupança 12m</div><div class="v ${tp12>=0?'pos':'neg'}">${fmtPct(tp12)}</div><div class="s">${fmtBRL0(rec12-des12)} guardados</div></div>
-    <div class="kpi"><div class="l">Gasto médio mensal 12m</div><div class="v">${fmtBRL0(des12/12)}</div><div class="s">receita média ${fmtBRL0(rec12/12)}</div></div>`;
+    <div class="kpi"><div class="l">Receitas · ${ymLabel(mSel.ym)}</div><div class="v pos">${fmtBRL0(mSel.rec)}</div><div class="s">média ${perLabel} ${fmtBRL0(recMed)}</div></div>
+    <div class="kpi"><div class="l">Despesas · ${ymLabel(mSel.ym)}</div><div class="v neg">${fmtBRL0(mSel.des)}</div><div class="s">média ${perLabel} ${fmtBRL0(desMed)}</div></div>
+    <div class="kpi"><div class="l">Saldo · ${ymLabel(mSel.ym)}</div><div class="v ${mSel.saldo>=0?'pos':'neg'}">${fmtBRL0(mSel.saldo)}</div><div class="s">média ${perLabel} ${fmtBRL0(saldoMed)}</div></div>
+    <div class="kpi"><div class="l">Poupança ${perLabel}</div><div class="v ${tpPer>=0?'pos':'neg'}">${fmtPct(tpPer)}</div><div class="s">${fmtBRL0(saldoPer)} guardados</div></div>
+    <div class="kpi"><div class="l">Gasto médio mensal ${perLabel}</div><div class="v">${fmtBRL0(desMed)}</div><div class="s">receita média ${fmtBRL0(recMed)}</div></div>`;
   $("homeCount").textContent = `${DB.tx.length.toLocaleString("pt-BR")} lançamentos · ${all[0].ym} → ${all[all.length-1].ym}`;
 
   renderMesEmCurso(all);
@@ -1699,6 +1702,7 @@ function renderCartoes(){
 
   $("ccKpis").innerHTML = `
     <div class="kpi"><div class="l">Fatura do mês${sel.value?" · "+sel.value:""}</div><div class="v neg">${fmtBRL0(mesAtual)}</div><div class="s">média 12m ${fmtBRL0(med12)}</div></div>
+    <div class="kpi"><div class="l">Média mensal</div><div class="v">${fmtBRL0(med12)}</div><div class="s">últimos 12 meses</div></div>
     <div class="kpi"><div class="l">Comprometido futuro</div><div class="v">${fmtBRL0(futVal)}</div><div class="s">${nParcFalt} parcela(s) a vencer</div></div>
     <div class="kpi"><div class="l">Parcelamentos ativos</div><div class="v blue">${ativos.length}</div><div class="s">restante ${fmtBRL0(ativos.reduce((s,g)=>s+g.restante,0))}</div></div>
     <div class="kpi"><div class="l">Compras registradas</div><div class="v">${f.length.toLocaleString("pt-BR")}</div><div class="s">${meses[0]||"—"} → ${meses[meses.length-1]||"—"}</div></div>`;
