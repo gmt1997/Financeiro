@@ -164,6 +164,16 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
 .mc-card .v{font-family:var(--mono);font-size:1.35rem;font-weight:600;letter-spacing:-.01em}
 .mc-card .s{font-size:.75rem;color:var(--muted);margin-top:3px}
 
+/* Meta de despesas */
+.mc-meta{margin-top:12px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+.mc-meta-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+.mc-meta-head .l{font-size:.82rem}
+.mc-meta-head .s{font-size:.72rem;color:var(--dim)}
+.mc-meta-bar{background:var(--line);border-radius:10px;height:8px;overflow:hidden;margin-bottom:6px}
+.mc-meta-fill{height:100%;border-radius:10px;transition:width .3s}
+.mc-meta-status{font-size:.78rem;color:var(--muted)}
+.mc-meta-status.pos{color:var(--pos)} .mc-meta-status.neg{color:var(--neg)} .mc-meta-status.warn{color:#C08014}
+
 /* ---------- Alertas ---------- */
 .alertas .al-list{display:flex;flex-direction:column;gap:8px}
 .alertas .al{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;gap:2px 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel)}
@@ -599,6 +609,14 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     </div>
   </div>
   <div class="card">
+    <h3>Meta de despesas</h3>
+    <div class="hint">A meta é calculada como X% abaixo da média de despesas dos últimos 12 meses. O objetivo aparece no card "Mês em curso" e como linha tracejada no gráfico de fluxo (agrupamento mensal). Recomendado: 10% a 15%.</div>
+    <div class="form">
+      <div class="f"><label>Redução sobre a média (%)</label><input type="number" id="cfgMetaPct" min="1" max="50" step="0.5" style="width:100px"></div>
+      <div class="f"><label>&nbsp;</label><button class="btn" id="cfgMetaSave">Salvar</button></div>
+    </div>
+  </div>
+  <div class="card">
     <h3>Importar planilha</h3>
     <div class="hint">Aceita <b>.xlsx</b> com as abas <code>DADOS DRE</code>, <code>BTC</code> e/ou <code>Patrimônio</code>, <b>faturas de cartão</b> (colunas Data · Descrição · Parcela · Valor · Categoria · Cartão) ou <b>.csv</b> exportado por este app. As duplicatas são ignoradas — pode re-subir o arquivo sem medo.</div>
     <div class="bar">
@@ -936,6 +954,14 @@ function renderMesEmCurso(all){
   const ritmo = gastoDiaMed? (gastoDia-gastoDiaMed)/gastoDiaMed : null;
   const barPct = Math.min(100, Math.round(fracDia*100));
   const cls = ritmo==null? "" : (ritmo>0.15? "neg": ritmo<-0.15? "pos": "");
+  // meta de despesa: % abaixo da média 12m (default 12.5%)
+  const metaPct = +(safeStore.get("fin_meta_desp_pct") || "12.5");
+  const metaDesp = desMed * (1 - metaPct/100);
+  const metaOk = metaDesp > 0;
+  const desPctMeta = metaOk ? desProj/metaDesp : null;
+  const metaBarPct = metaOk ? Math.min(100, Math.round((cur.des/metaDesp)*100)) : 0;
+  const metaCls = desPctMeta==null ? "" : desPctMeta>1 ? "neg" : desPctMeta>0.90 ? "warn" : "pos";
+  const metaBarColor = metaCls==="neg" ? "var(--neg)" : metaCls==="warn" ? "#C08014" : "var(--pos)";
   box.innerHTML = `
     <div class="mc-head">
       <div><h3>${ymLabel(ym)} · em curso</h3>
@@ -963,7 +989,19 @@ function renderMesEmCurso(all){
         <div class="v ${cls}">${fmtBRL0(gastoDia)}<span class="s"> /dia</span></div>
         <div class="s">média histórica ${fmtBRL0(gastoDiaMed)}/dia ${ritmo==null?"":`· ${ritmo>=0?"▲":"▼"} ${fmtPct(Math.abs(ritmo))}`}</div>
       </div>
-    </div>`;
+    </div>
+    ${metaOk ? `<div class="mc-meta">
+      <div class="mc-meta-head">
+        <span class="l">Meta de despesas: <b>${fmtBRL0(metaDesp)}</b></span>
+        <span class="s">${metaPct}% abaixo da média 12m (${fmtBRL0(desMed)})</span>
+      </div>
+      <div class="mc-meta-bar"><div class="mc-meta-fill" style="width:${metaBarPct}%;background:${metaBarColor}"></div></div>
+      <div class="mc-meta-status ${metaCls}">
+        ${desPctMeta<=1
+          ? `Projeção <b>${fmtBRL0(desProj)}</b> · ${fmtBRL0(metaDesp-desProj)} abaixo da meta ✓`
+          : `Projeção <b>${fmtBRL0(desProj)}</b> · ${fmtBRL0(desProj-metaDesp)} acima da meta ▲`}
+      </div>
+    </div>` : ""}`;
 }
 
 /* === Alertas de gastos: categorias do mês corrente vs média histórica === */
@@ -1089,13 +1127,19 @@ function renderHome(){
   // meses no agrupamento (para média mensal no tooltip quando agrupa por ano/semestre/trimestre)
   const mesesPorGrupo = homeGroup==="mes"?1 : homeGroup==="tri"?3 : homeGroup==="sem"?6 : 12;
   const isAgrupado = mesesPorGrupo > 1;
+  // meta de despesa no gráfico (quando agrupamento = mês)
+  const metaPctG = +(safeStore.get("fin_meta_desp_pct") || "12.5");
+  const desMed12G = nG>=2 ? g.reduce((s,r)=>s+r.des,0)/nG : 0;
+  const metaDespG = desMed12G * (1 - metaPctG/100);
+  const showMeta = homeGroup==="mes" && metaDespG>0;
   mkChart("chFlow",{ data:{ labels, datasets:[
       {type:"bar",label:"Receitas",data:g.map(r=>r.rec),backgroundColor:"rgba(23,126,81,.72)",borderRadius:barW,order:2},
       {type:"bar",label:"Despesas",data:g.map(r=>-r.des),backgroundColor:"rgba(192,57,75,.62)",borderRadius:barW,order:2},
       {type:"line",label:"Saldo",data:g.map(r=>r.saldo),borderColor:"#1F1D1A",backgroundColor:"#1F1D1A",tension:.3,pointRadius:homeGroup==="mes"?2:3,borderWidth:2,order:1},
-      {type:"line",label:"Média Receitas",data:g.map(()=>avgRec),borderColor:"rgba(23,126,81,.45)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0,hidden:false},
-      {type:"line",label:"Média Despesas",data:g.map(()=>-avgDes),borderColor:"rgba(192,57,75,.45)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0,hidden:false},
-      {type:"line",label:"Média Saldo",data:g.map(()=>avgSaldo),borderColor:"rgba(31,29,26,.35)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0,hidden:false}
+      {type:"line",label:"Média Receitas",data:g.map(()=>avgRec),borderColor:"rgba(23,126,81,.45)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0},
+      {type:"line",label:"Média Despesas",data:g.map(()=>-avgDes),borderColor:"rgba(192,57,75,.45)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0},
+      {type:"line",label:"Média Saldo",data:g.map(()=>avgSaldo),borderColor:"rgba(31,29,26,.35)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,pointHoverRadius:0,order:0},
+      ...(showMeta ? [{type:"line",label:"Meta Despesas",data:g.map(()=>-metaDespG),borderColor:"#C08014",borderDash:[10,5],borderWidth:2,pointRadius:0,pointHoverRadius:0,order:0}] : [])
     ]},
     options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
       scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:homeGroup==="mes"?24:40}},y:{ticks:{callback:moneyTick}}},
@@ -2205,6 +2249,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
     $("cfgCutoffSave").onclick = ()=>{ const v=$("cfgCutoff").value;
       if(!/^\d{4}-\d{2}$/.test(v)) return toast("Escolha um mês válido.");
       setDreCutoff(v); toast("Corte atualizado para "+v+"."); renderAll(); }; }
+
+  // meta de despesas
+  if($("cfgMetaPct")){ $("cfgMetaPct").value = safeStore.get("fin_meta_desp_pct") || "12.5";
+    $("cfgMetaSave").onclick = ()=>{ const v=+$("cfgMetaPct").value;
+      if(isNaN(v)||v<1||v>50) return toast("Informe um valor entre 1% e 50%.");
+      safeStore.set("fin_meta_desp_pct", String(v)); toast("Meta atualizada para "+v+"% abaixo da média."); renderAll(); }; }
 
   // cartões
   $("ccCard").onchange = renderCartoes;
