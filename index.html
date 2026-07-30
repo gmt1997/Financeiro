@@ -399,6 +399,21 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="twrap"><table id="tblAnos"></table></div>
   </div>
 
+  <div class="card">
+    <h3>Evolução no tempo <span class="muted" id="ahEvolTag"></span></h3>
+    <div class="bar" style="gap:12px;flex-wrap:wrap">
+      <div class="seg" id="ahEvolGroup"><button data-v="mes" class="on">Mês</button><button data-v="tri">Trimestre</button><button data-v="sem">Semestre</button><button data-v="ano">Ano</button></div>
+      <select id="ahEvolCat" style="min-width:200px"></select>
+      <select id="ahEvolRange" style="min-width:180px">
+        <option value="24" selected>Últimos 24 períodos</option>
+        <option value="12">Últimos 12</option>
+        <option value="36">Últimos 36</option>
+        <option value="0">Todo o histórico</option>
+      </select>
+    </div>
+    <div class="chartbox tall"><canvas id="chEvol"></canvas></div>
+  </div>
+
   <div class="grid2">
     <div class="card">
       <h3>Análise vertical <span class="muted" id="avTag"></span></h3>
@@ -1308,6 +1323,53 @@ async function saveLancEdit(id){
 
 /* ================= ANÁLISES ================= */
 let aTipo = "DESPESA";
+let ahEvolGroup = "mes";
+function renderAnalEvol(){
+  // agregar por período do tipo selecionado
+  const catSel = $("ahEvolCat").value || "";   // "" = total
+  const n = +$("ahEvolRange").value;
+  // popular dropdown de categoria (mantém seleção)
+  const cats = [...new Set(allTx().filter(t=>t.tipo===aTipo).map(t=>t.categoria))].sort();
+  $("ahEvolCat").innerHTML = `<option value="">Todas as categorias</option>`+cats.map(c=>`<option ${c===catSel?"selected":""}>${c}</option>`).join("");
+
+  // agrupamento
+  const byKey = new Map();
+  for(const t of allTx()){ if(t.tipo!==aTipo) continue;
+    if(catSel && t.categoria!==catSel) continue;
+    const [y,mo] = t.data.slice(0,7).split("-").map(Number);
+    let key, label;
+    if(ahEvolGroup==="mes"){ key = `${y}-${String(mo).padStart(2,"0")}`; label = MESES[mo-1]+"/"+String(y).slice(2); }
+    else if(ahEvolGroup==="tri"){ const q=Math.ceil(mo/3); key=`${y}-T${q}`; label=`T${q}/${String(y).slice(2)}`; }
+    else if(ahEvolGroup==="sem"){ const s=mo<=6?1:2; key=`${y}-S${s}`; label=`S${s}/${String(y).slice(2)}`; }
+    else { key = String(y); label = String(y); }
+    if(!byKey.has(key)) byKey.set(key, {key, label, val:0});
+    byKey.get(key).val += t.valor;
+  }
+  const all = [...byKey.values()].sort((a,b)=>a.key<b.key?-1:1);
+  const rows = n? all.slice(-n) : all;
+  if(!rows.length){
+    if(charts.chEvol){ charts.chEvol.destroy(); delete charts.chEvol; }
+    return;
+  }
+  const avg = rows.reduce((s,r)=>s+r.val,0)/rows.length;
+  const cor = aTipo==="DESPESA" ? "#C0394B" : "#177E51";
+  const corFill = aTipo==="DESPESA" ? "rgba(192,57,75,.10)" : "rgba(23,126,81,.10)";
+  const label = catSel || (aTipo==="DESPESA"?"Despesas totais":"Receitas totais");
+  mkChart("chEvol",{
+    data:{labels:rows.map(r=>r.label), datasets:[
+      {type:"line", label, data:rows.map(r=>r.val),
+        borderColor:cor, backgroundColor:corFill, fill:true, tension:.25,
+        pointRadius: ahEvolGroup==="mes"?2:3, pointHoverRadius:5, borderWidth:2},
+      {type:"line", label:`Média (${fmtBRL0(avg)})`, data:rows.map(()=>avg),
+        borderColor:"rgba(31,29,26,.35)", borderDash:[6,4], borderWidth:1.5, pointRadius:0, pointHoverRadius:0}
+    ]},
+    options:{maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false}, ticks:{maxTicksLimit: ahEvolGroup==="mes"?24:40}},
+              y:{beginAtZero:true, ticks:{callback:moneyTick}}},
+      plugins:{legend:{labels:{boxWidth:10}},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtBRL(c.parsed.y)}`}}}}});
+}
+
 function renderAnal(){
   const yr = $("aAno").value;
   const ys = yearAgg();
@@ -1328,6 +1390,10 @@ function renderAnal(){
   const tipoNome = aTipo==="DESPESA"?"Despesas":"Receitas";
   $("avTag").textContent = `· ${tipoNome} ${yr}`;
   $("ahTag").textContent = `· ${tipoNome} ${yr}`;
+  $("ahEvolTag").textContent = `· ${tipoNome}`;
+
+  // evolução no tempo
+  renderAnalEvol();
 
   // vertical
   const cats = catAgg(aTipo, t=>t.data.slice(0,4)===yr);
@@ -2218,6 +2284,14 @@ document.addEventListener("DOMContentLoaded", ()=>{
     $("aTipoSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
     renderAnal();
   });
+  $("ahEvolGroup").addEventListener("click", e=>{
+    const b=e.target.closest("button"); if(!b) return;
+    ahEvolGroup=b.dataset.v;
+    $("ahEvolGroup").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
+    renderAnalEvol();
+  });
+  $("ahEvolCat").onchange = renderAnalEvol;
+  $("ahEvolRange").onchange = renderAnalEvol;
 
   // patrimônio
   $("tblPat").addEventListener("click", async e=>{
