@@ -174,6 +174,35 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
 .mc-meta-status{font-size:.78rem;color:var(--muted)}
 .mc-meta-status.pos{color:var(--pos)} .mc-meta-status.neg{color:var(--neg)} .mc-meta-status.warn{color:#C08014}
 
+/* Exposição BTC */
+.expo-bar{position:relative;background:var(--line);border-radius:10px;height:12px;margin:14px 0 8px}
+.expo-fill{height:100%;border-radius:10px;transition:width .3s}
+.expo-target{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--fg);opacity:.55}
+.expo-target::after{content:"▲";position:absolute;top:-14px;left:-4px;font-size:9px;color:var(--fg);opacity:.55}
+.expo-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:.76rem;color:var(--muted);margin-bottom:8px}
+.expo-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.expo-status{font-size:.82rem;color:var(--muted);padding:8px 10px;border-radius:8px;background:var(--panel2)}
+.expo-status.ok{color:var(--pos)} .expo-status.warn{color:#C08014;background:rgba(192,128,20,.07)} .expo-status.alto{color:var(--neg);background:rgba(192,57,75,.06)}
+
+/* Comparação YoY */
+.yoy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+.yoy-row{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.yoy-label{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.yoy-vals{display:flex;align-items:baseline;gap:6px;font-family:var(--mono);flex-wrap:wrap}
+.yoy-prev{color:var(--dim);font-size:.85rem}
+.yoy-arr{color:var(--dim);font-size:.8rem}
+.yoy-cur{font-size:1.15rem;font-weight:600}
+.yoy-delta{font-size:.82rem;font-weight:600;margin-top:4px}
+.yoy-delta.pos{color:var(--pos)} .yoy-delta.neg{color:var(--neg)}
+.yoy-cats{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.yoy-cats-title{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.yoy-cat-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:4px 0;font-size:.85rem}
+.yoy-cat-name{font-weight:500}
+.yoy-cat-bar-wrap{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.yoy-cat-delta{font-family:var(--mono);font-size:.82rem;font-weight:600;text-align:right;min-width:80px}
+.yoy-cat-delta.pos{color:var(--pos)} .yoy-cat-delta.neg{color:var(--neg)}
+@media(max-width:640px){.yoy-grid{grid-template-columns:1fr}.yoy-cat-row{grid-template-columns:1fr auto}.yoy-cat-bar-wrap{display:none}}
+
 /* ---------- Alertas ---------- */
 .alertas .al-list{display:flex;flex-direction:column;gap:8px}
 .alertas .al{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;gap:2px 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel)}
@@ -291,10 +320,18 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="card alertas" id="alertas" style="display:none"></div>
   </div>
 
+  <div class="card yoy" id="yoyCard" style="display:none"></div>
+
   <div class="card">
     <h3>Receitas × Despesas × Saldo</h3>
     <div class="hint">Barras: entradas e saídas · Linha: saldo do mês</div>
     <div class="chartbox tall"><canvas id="chFlow"></canvas></div>
+  </div>
+  <div class="card">
+    <h3>Projeção de fluxo · próximos 12 meses</h3>
+    <div class="hint">Parcelas de cartão já conhecidas + estimativa de receitas/despesas pela média histórica. Barras cinza = comprometido de cartão (certo) · linha = saldo projetado.</div>
+    <div class="chartbox tall"><canvas id="chProj"></canvas></div>
+    <div id="projResumo" class="hint" style="margin-top:8px"></div>
   </div>
   <div class="grid31">
     <div class="card">
@@ -439,6 +476,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
   <h2>Patrimônio</h2>
   <p class="sub">Evolução da carteira por classe de ativo desde 2019.</p>
   <div class="kpis" id="patKpis"></div>
+  <div class="card btc-expo" id="btcExpo" style="display:none"></div>
   <div class="card">
     <h3>Evolução por classe</h3>
     <div class="hint">Área empilhada — valor de mercado no fim de cada mês</div>
@@ -629,6 +667,14 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="form">
       <div class="f"><label>Redução sobre a média (%)</label><input type="number" id="cfgMetaPct" min="1" max="50" step="0.5" style="width:100px"></div>
       <div class="f"><label>&nbsp;</label><button class="btn" id="cfgMetaSave">Salvar</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Exposição ao Bitcoin</h3>
+    <div class="hint">Define o alvo de participação do Bitcoin no seu patrimônio. Aparece na aba Patrimônio com barra visual e alerta de risco quando a exposição ultrapassa o alvo. Sugerido: 10% a 25% conforme seu apetite a risco.</div>
+    <div class="form">
+      <div class="f"><label>Alvo de exposição (%)</label><input type="number" id="cfgBtcExpo" min="1" max="100" step="1" style="width:100px"></div>
+      <div class="f"><label>&nbsp;</label><button class="btn" id="cfgBtcExpoSave">Salvar</button></div>
     </div>
   </div>
   <div class="card">
@@ -1097,6 +1143,143 @@ function renderAlertas(all){
       </div>`).join("")}</div>${notaCartao}`;
 }
 
+/* === Projeção de fluxo de caixa · próximos 12 meses === */
+function renderProjFuturo(all){
+  const box = $("chProj"); if(!box) return;
+  const now = new Date();
+  const curYM = now.toISOString().slice(0,7);
+  // médias históricas dos últimos 12 meses fechados (exclui mês corrente parcial)
+  const hist = all.filter(r=>r.ym < curYM).slice(-12);
+  if(hist.length < 3){ if(charts.chProj){charts.chProj.destroy();delete charts.chProj;} $("projResumo").textContent=""; return; }
+  const recMed = hist.reduce((s,r)=>s+r.rec,0)/hist.length;
+  const desMed = hist.reduce((s,r)=>s+r.des,0)/hist.length;
+  // parcelas de cartão já conhecidas por mês futuro (das compras registradas + projeção de parcelamentos)
+  const cardFut = new Map();   // ym -> valor de cartão comprometido
+  const cc = ccUnified();
+  // 1) compras já registradas em meses futuros
+  for(const c of cc){ if(c.mes > curYM) cardFut.set(c.mes,(cardFut.get(c.mes)||0)+c.valor); }
+  // 2) parcelas que ainda faltam lançar de parcelamentos ativos
+  const groups = new Map();
+  for(const c of cc){ if(!c.parcelas||c.parcelas<2) continue;
+    const k=c.cartao+"|"+(c.descricao||"").toLowerCase()+"|"+c.parcelas;
+    if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(c); }
+  for(const [,itens] of groups){
+    itens.sort((a,b)=>a.mes<b.mes?-1:1);
+    const ult = itens[itens.length-1];
+    const ultNum = ult.parcela || itens.length;
+    const faltam = Math.max(0, ult.parcelas - ultNum);
+    const [uy,um] = ult.mes.split("-").map(Number);
+    for(let i=1;i<=faltam;i++){
+      const d = new Date(uy, um-1+i, 1);
+      const ym = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+      if(ym > curYM) cardFut.set(ym,(cardFut.get(ym)||0)+ult.valor);
+    }
+  }
+  // quanto da despesa média histórica JÁ é gasto de cartão (para não contar 2x)
+  // aproximação: fração média que o cartão representa nas despesas dos últimos 12m
+  let desTot=0, cardTot=0;
+  for(const t of allTx()){ const ym=t.data.slice(0,7);
+    if(t.tipo!=="DESPESA") continue;
+    if(ym>=hist[0].ym && ym<curYM){ desTot+=t.valor; if(t.forma==="Cartão de Crédito"||t.virtual) cardTot+=t.valor; } }
+  const fracNaoCartao = desTot>0 ? Math.max(0,(desTot-cardTot)/desTot) : 0.5;
+  const desFixaEstim = desMed*fracNaoCartao;   // parte não-cartão da despesa média (Pix, boletos, etc.)
+
+  // montar 12 meses futuros
+  const labels=[], barCard=[], barEstim=[], lineSaldo=[]; let acumulado=0;
+  const detalhe=[];
+  for(let i=1;i<=12;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+    const ym = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+    const card = cardFut.get(ym)||0;
+    const desTotalMes = Math.max(card, desFixaEstim + card);   // cartão certo + estimativa não-cartão
+    const rec = recMed;
+    const saldo = rec - desTotalMes;
+    acumulado += saldo;
+    labels.push(ymLabel(ym));
+    barCard.push(card);
+    barEstim.push(Math.max(0, desTotalMes - card));   // parte estimada (não-cartão)
+    lineSaldo.push(saldo);
+    detalhe.push({ym,card,saldo});
+  }
+  const totalCard = barCard.reduce((s,v)=>s+v,0);
+  const mesNeg = detalhe.filter(d=>d.saldo<0);
+  mkChart("chProj",{ data:{ labels, datasets:[
+      {type:"bar",label:"Cartão comprometido",data:barCard,backgroundColor:"rgba(120,120,120,.65)",stack:"d",borderRadius:2,order:3},
+      {type:"bar",label:"Despesa estimada",data:barEstim,backgroundColor:"rgba(192,57,75,.35)",stack:"d",borderRadius:2,order:3},
+      {type:"line",label:"Receita estimada",data:labels.map(()=>recMed),borderColor:"rgba(23,126,81,.55)",borderDash:[6,4],borderWidth:1.5,pointRadius:0,order:1},
+      {type:"line",label:"Saldo projetado",data:lineSaldo,borderColor:"#1F1D1A",backgroundColor:"#1F1D1A",tension:.25,pointRadius:3,borderWidth:2,order:0}
+    ]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:{callback:moneyTick}}},
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtBRL(Math.abs(c.parsed.y))}`}}}}});
+
+  const resumo = `Comprometido de cartão nos próximos 12 meses: <b>${fmtBRL0(totalCard)}</b> · receita média estimada ${fmtBRL0(recMed)}/mês · despesa média ${fmtBRL0(desMed)}/mês.` +
+    (mesNeg.length? ` <b class="neg">Atenção:</b> ${mesNeg.length} mês(es) com saldo projetado negativo (${mesNeg.map(m=>ymLabel(m.ym)).join(", ")}).` : ` Todos os meses com saldo projetado positivo.`);
+  $("projResumo").innerHTML = resumo;
+}
+
+/* === Comparação com o mesmo mês do ano anterior (sazonalidade) === */
+function renderYoY(all){
+  const box = $("yoyCard"); if(!box) return;
+  const now = new Date();
+  const curYM = now.toISOString().slice(0,7);
+  const [cy,cm] = curYM.split("-").map(Number);
+  const prevYM = `${cy-1}-${String(cm).padStart(2,"0")}`;
+  const cur = all.find(r=>r.ym===curYM);
+  const prev = all.find(r=>r.ym===prevYM);
+  if(!cur || !prev){ box.style.display="none"; return; }
+  box.style.display = "";
+  const dRec = prev.rec? (cur.rec-prev.rec)/prev.rec : null;
+  const dDes = prev.des? (cur.des-prev.des)/prev.des : null;
+  const dSaldo = prev.saldo? (cur.saldo-prev.saldo)/Math.abs(prev.saldo) : null;
+  const arrow = v => v==null?"" : v>=0?"▲":"▼";
+  // como o mês corrente é parcial, deixamos claro
+  const dia = now.getDate();
+  const totalDias = new Date(cy, cm, 0).getDate();
+  const parcial = dia < totalDias;
+
+  // categorias que mais variaram (despesas)
+  const catCur = new Map(), catPrev = new Map();
+  for(const t of allTx()){ if(t.tipo!=="DESPESA") continue;
+    const ym=t.data.slice(0,7);
+    if(ym===curYM) catCur.set(t.categoria,(catCur.get(t.categoria)||0)+t.valor);
+    else if(ym===prevYM) catPrev.set(t.categoria,(catPrev.get(t.categoria)||0)+t.valor); }
+  const cats = [...new Set([...catCur.keys(),...catPrev.keys()])];
+  const varCats = cats.map(c=>{
+    const a=catCur.get(c)||0, b=catPrev.get(c)||0;
+    return {cat:c, cur:a, prev:b, diff:a-b, pct: b? (a-b)/b : null};
+  }).filter(x=>Math.abs(x.diff)>=50).sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff)).slice(0,4);
+
+  const cmpRow = (label, curV, prevV, d, invert)=>{
+    // invert=true → aumento é ruim (despesas)
+    const good = d==null ? "" : (invert ? (d<=0?"pos":"neg") : (d>=0?"pos":"neg"));
+    return `<div class="yoy-row">
+      <div class="yoy-label">${label}</div>
+      <div class="yoy-vals"><span class="yoy-prev">${fmtBRL0(prevV)}</span><span class="yoy-arr">→</span><span class="yoy-cur">${fmtBRL0(curV)}</span></div>
+      <div class="yoy-delta ${good}">${d==null?"—":arrow(d)+" "+fmtPct(Math.abs(d))}</div>
+    </div>`;
+  };
+
+  box.innerHTML = `
+    <div class="mc-head">
+      <div><h3>${ymLabel(curYM)} vs ${ymLabel(prevYM)}</h3>
+        <div class="hint">Comparação com o mesmo mês do ano anterior${parcial?` · mês em curso (dia ${dia}/${totalDias}), comparação parcial`:""}</div></div>
+    </div>
+    <div class="yoy-grid">
+      ${cmpRow("Receitas", cur.rec, prev.rec, dRec, false)}
+      ${cmpRow("Despesas", cur.des, prev.des, dDes, true)}
+      ${cmpRow("Saldo", cur.saldo, prev.saldo, dSaldo, false)}
+    </div>
+    ${varCats.length? `<div class="yoy-cats">
+      <div class="yoy-cats-title">Maiores variações por categoria</div>
+      ${varCats.map(v=>`<div class="yoy-cat-row">
+        <span class="yoy-cat-name">${v.cat}</span>
+        <span class="yoy-cat-bar-wrap"><span class="yoy-cat-prev">${fmtBRL0(v.prev)}</span> → <span class="yoy-cat-cur">${fmtBRL0(v.cur)}</span></span>
+        <span class="yoy-cat-delta ${v.diff<=0?'pos':'neg'}">${v.diff>=0?"+":"−"}${fmtBRL0(Math.abs(v.diff))}</span>
+      </div>`).join("")}
+    </div>` : ""}`;
+}
+
 function renderHome(){
   const all = monthlyAgg();
   if(!all.length) return;
@@ -1130,6 +1313,8 @@ function renderHome(){
 
   renderMesEmCurso(all);
   renderAlertas(all);
+  renderYoY(all);
+  renderProjFuturo(all);
 
   const g = groupFlow(rows, homeGroup);
   const labels = g.map(x=>x.label);
@@ -1438,6 +1623,48 @@ function renderAnal(){
 }
 
 /* ================= PATRIMÔNIO ================= */
+/* === Exposição ao Bitcoin: alocação, meta e risco === */
+function renderBtcExpo(total, btcVal){
+  const box = $("btcExpo");
+  if(!box) return;
+  if(!total || btcVal==null){ box.style.display="none"; return; }
+  box.style.display = "";
+  const px = getBtcPx();
+  const btcS = btcStats();
+  const pct = btcVal/total;
+  // meta de exposição (default 20%)
+  const metaPct = +(safeStore.get("fin_btc_expo_meta") || "20") / 100;
+  const ratio = metaPct>0 ? pct/metaPct : 0;
+  // faixas de risco relativas à meta
+  let sev, msg, cor;
+  if(pct <= metaPct*0.75){ sev="ok"; cor="var(--pos)"; msg="Exposição confortável, dentro do alvo."; }
+  else if(pct <= metaPct){ sev="ok"; cor="var(--pos)"; msg="Próximo do alvo — alocação saudável."; }
+  else if(pct <= metaPct*1.25){ sev="warn"; cor="#C08014"; msg="Acima do alvo. Considere rebalancear em aportes futuros."; }
+  else { sev="alto"; cor="var(--neg)"; msg="Bem acima do alvo. Exposição concentrada — avalie realizar parte ou aportar noutras classes."; }
+  const barPct = Math.min(100, Math.round(pct*100));
+  const metaMarker = Math.min(100, Math.round(metaPct*100));
+  // quanto precisaria vender/aportar para voltar ao alvo
+  const alvoValor = total*metaPct;
+  const ajuste = btcVal - alvoValor;   // >0 = acima (vender), <0 = abaixo (pode aportar)
+  const ajusteBtc = px? Math.abs(ajuste)/px : null;
+
+  box.innerHTML = `
+    <div class="mc-head">
+      <div><h3>Exposição ao Bitcoin</h3>
+        <div class="hint">${fmtBtc(btcS.qty)} · ${px?fmtBRL0(px)+"/BTC":"defina a cotação na aba Bitcoin"}</div></div>
+      <div style="text-align:right"><div class="v btc" style="font-family:var(--mono);font-size:1.6rem;font-weight:600">${fmtPct(pct)}</div><div class="s">do patrimônio</div></div>
+    </div>
+    <div class="expo-bar">
+      <div class="expo-fill" style="width:${barPct}%;background:${cor}"></div>
+      <div class="expo-target" style="left:${metaMarker}%" title="Alvo: ${fmtPct(metaPct)}"></div>
+    </div>
+    <div class="expo-legend">
+      <span><span class="expo-dot" style="background:${cor}"></span>Atual ${fmtPct(pct)} · ${fmtBRL0(btcVal)}</span>
+      <span><span class="expo-dot" style="background:var(--dim)"></span>Alvo ${fmtPct(metaPct)} · ${fmtBRL0(alvoValor)}</span>
+    </div>
+    <div class="expo-status ${sev}">${msg}${ajusteBtc!=null && Math.abs(ajuste)>total*0.01 ? ` <b>${ajuste>0?"Excesso":"Espaço"} de ${fmtBRL0(Math.abs(ajuste))}</b> (≈ ${ajusteBtc.toFixed(4)} ₿)` : ""}</div>`;
+}
+
 function renderPat(){
   const p = DB.pat;
   if(!p.length) return;
@@ -1453,6 +1680,8 @@ function renderPat(){
     <div class="kpi"><div class="l">Cripto na carteira</div><div class="v btc">${fmtBRL0(btcVal)}</div><div class="s">${fmtPct(btcVal/total)} do patrimônio</div></div>
     <div class="kpi"><div class="l">Maior classe</div>${(()=>{const m=PAT_CLASSES.map(([k,n])=>[n,last[k]||0]).sort((a,b)=>b[1]-a[1])[0];return `<div class="v">${m[0]}</div><div class="s">${fmtBRL0(m[1])} · ${fmtPct(m[1]/total)}</div>`})()}</div>
     <div class="kpi"><div class="l">Meses registrados</div><div class="v">${p.length}</div><div class="s">${p[0].mes} → ${last.mes}</div></div>`;
+
+  renderBtcExpo(total, btcVal);
 
   const labels = p.map(r=>ymLabel(r.mes));
   mkChart("chPat",{type:"line",data:{labels,datasets:PAT_CLASSES.map(([k,n,col])=>({label:n,data:p.map(r=>r[k]||0),borderColor:col,backgroundColor:col+"55",fill:true,pointRadius:0,borderWidth:1,tension:.25}))},
@@ -2329,6 +2558,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
     $("cfgMetaSave").onclick = ()=>{ const v=+$("cfgMetaPct").value;
       if(isNaN(v)||v<1||v>50) return toast("Informe um valor entre 1% e 50%.");
       safeStore.set("fin_meta_desp_pct", String(v)); toast("Meta atualizada para "+v+"% abaixo da média."); renderAll(); }; }
+
+  // meta de exposição BTC
+  if($("cfgBtcExpo")){ $("cfgBtcExpo").value = safeStore.get("fin_btc_expo_meta") || "20";
+    $("cfgBtcExpoSave").onclick = ()=>{ const v=+$("cfgBtcExpo").value;
+      if(isNaN(v)||v<1||v>100) return toast("Informe um valor entre 1% e 100%.");
+      safeStore.set("fin_btc_expo_meta", String(v)); toast("Alvo de exposição atualizado para "+v+"%."); renderAll(); }; }
 
   // cartões
   $("ccCard").onchange = renderCartoes;
