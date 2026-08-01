@@ -203,6 +203,12 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
 .yoy-cat-delta.pos{color:var(--pos)} .yoy-cat-delta.neg{color:var(--neg)}
 @media(max-width:640px){.yoy-grid{grid-template-columns:1fr}.yoy-cat-row{grid-template-columns:1fr auto}.yoy-cat-bar-wrap{display:none}}
 
+/* RE por banco */
+.re-banks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
+.re-bank{display:flex;align-items:center;gap:6px}
+.re-bank-label{font-size:.75rem;color:var(--dim);min-width:80px}
+.re-bank input{flex:1;min-width:0}
+
 /* ---------- Alertas ---------- */
 .alertas .al-list{display:flex;flex-direction:column;gap:8px}
 .alertas .al{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;gap:2px 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel)}
@@ -1288,8 +1294,14 @@ function renderHome(){
   // month selector
   const sel = $("homeMonth");
   const cur = sel.value;
+  const nowYM = new Date().toISOString().slice(0,7);
   sel.innerHTML = rows.map(r=>`<option value="${r.ym}">${ymLabel(r.ym)}</option>`).join("");
-  sel.value = rows.some(r=>r.ym===cur) ? cur : rows[rows.length-1].ym;
+  // primeira vez: mês corrente; depois mantém seleção do usuário
+  if(!sel.dataset.init && rows.some(r=>r.ym===nowYM)){
+    sel.value = nowYM; sel.dataset.init = "1";
+  } else {
+    sel.value = rows.some(r=>r.ym===cur) ? cur : rows[rows.length-1].ym;
+  }
   const mSel = rows.find(r=>r.ym===sel.value) || rows[rows.length-1];
 
   // KPIs — médias baseadas no período selecionado (rows), não fixo 12m
@@ -1699,25 +1711,69 @@ function renderPat(){
     options:{maintainAspectRatio:false,scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{ticks:{callback:v=>v.toFixed(1)+"%"}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.y.toFixed(2)}%`}}}}});
 
   // form
+  const RE_BANKS = ["Nubank","Itaú","PicPay","Mercado Pago"];
   if(!$("patForm").dataset.built){
     const next = (()=>{ const [y,m]=last.mes.split("-").map(Number); const d=new Date(y,m,1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); })();
+    const classFields = PAT_CLASSES.map(([k,n])=>{
+      if(k==="re"){
+        // substituir por sub-campos de bancos
+        return `<div class="f wide"><label>Reserva de Emergência</label>
+          <div class="re-banks">${RE_BANKS.map(b=>`<div class="re-bank"><span class="re-bank-label">${b}</span><input type="number" step="0.01" min="0" class="re-input" data-bank="${b}" placeholder="0,00"></div>`).join("")}
+          <div class="re-bank"><span class="re-bank-label"><b>Total RE</b></span><input type="number" id="p_re" readonly tabindex="-1" style="background:var(--panel2);font-weight:600"></div></div></div>`;
+      }
+      return `<div class="f"><label>${n}</label><input type="number" step="0.01" min="0" id="p_${k}" placeholder="0,00"></div>`;
+    }).join("");
     $("patForm").innerHTML = `<div class="f"><label>Mês</label><input type="month" id="pMes" value="${next}"></div>`+
-      PAT_CLASSES.map(([k,n])=>`<div class="f"><label>${n}</label><input type="number" step="0.01" min="0" id="p_${k}" placeholder="0,00"></div>`).join("")+
+      classFields+
       `<div class="f"><label>Rentab. mês (%)</label><input type="number" step="0.01" id="pRent" placeholder="Ex.: 1,2"></div>
        <div class="f"><label>&nbsp;</label><button class="btn pri" id="pAdd">Registrar fechamento</button></div>`;
     $("patForm").dataset.built = "1";
     $("pAdd").onclick = onAddPat;
+    // auto-somar RE ao digitar
+    $("patForm").addEventListener("input", e=>{
+      if(e.target.classList.contains("re-input")){
+        const total = [...$("patForm").querySelectorAll(".re-input")].reduce((s,i)=>s+(+i.value||0),0);
+        $("p_re").value = total.toFixed(2);
+      }
+    });
+    // pré-preencher com último detalhe se existir
+    const lastDet = last.re_detalhe;
+    if(lastDet && typeof lastDet==="object"){
+      for(const inp of $("patForm").querySelectorAll(".re-input")){
+        const b = inp.dataset.bank;
+        if(lastDet[b]) inp.value = lastDet[b];
+      }
+      const t = Object.values(lastDet).reduce((s,v)=>s+(+v||0),0);
+      if(t>0) $("p_re").value = t.toFixed(2);
+    }
   }
 
+  // tabela com tooltip de RE
+  const reTooltip = r => {
+    const det = r.re_detalhe;
+    if(!det || typeof det !== "object") return "";
+    const lines = RE_BANKS.filter(b=>det[b]).map(b=>`${b}: ${fmtBRL0(det[b])}`).join("\n");
+    return lines ? ` title="${lines}" style="cursor:help;text-decoration:underline dotted var(--dim)"` : "";
+  };
   const rows = [...p].reverse().slice(0,60);
   $("tblPat").innerHTML = `<thead><tr><th>Mês</th>${PAT_CLASSES.map(([k,n])=>`<th class="num">${n}</th>`).join("")}<th class="num">Total</th><th class="num">Rent.</th><th></th></tr></thead><tbody>`+
     rows.map(r=>{const tot=r.patrimonio||PAT_CLASSES.reduce((s,[k])=>s+(r[k]||0),0);
-      return `<tr><td>${ymLabel(r.mes)}</td>${PAT_CLASSES.map(([k])=>`<td class="num">${r[k]?Math.round(r[k]).toLocaleString("pt-BR"):"·"}</td>`).join("")}<td class="num"><b>${fmtBRL0(tot)}</b></td><td class="num ${r.rentabilidade>=0?'pos':'neg'}">${r.rentabilidade==null?"—":fmtPct(r.rentabilidade)}</td><td><button class="del" data-delpat="${r.id}">✕</button></td></tr>`;}).join("")+"</tbody>";
+      return `<tr><td>${ymLabel(r.mes)}</td>${PAT_CLASSES.map(([k])=>{
+        const val = r[k]?Math.round(r[k]).toLocaleString("pt-BR"):"·";
+        if(k==="re") return `<td class="num"${reTooltip(r)}>${val}</td>`;
+        return `<td class="num">${val}</td>`;
+      }).join("")}<td class="num"><b>${fmtBRL0(tot)}</b></td><td class="num ${r.rentabilidade>=0?'pos':'neg'}">${r.rentabilidade==null?"—":fmtPct(r.rentabilidade)}</td><td><button class="del" data-delpat="${r.id}">✕</button></td></tr>`;}).join("")+"</tbody>";
 }
 async function onAddPat(){
   const mes = $("pMes").value; if(!mes) return toast("Informe o mês.");
   const row = {mes};
   PAT_CLASSES.forEach(([k])=>row[k]=+($("p_"+k).value||0));
+  // detalhe da reserva de emergência por banco
+  const reDet = {};
+  for(const inp of document.querySelectorAll(".re-input")){
+    const v = +inp.value||0; if(v>0) reDet[inp.dataset.bank] = +v.toFixed(2);
+  }
+  if(Object.keys(reDet).length) row.re_detalhe = reDet;
   const r = $("pRent").value; row.rentabilidade = r===""?null:(+r)/100;
   row.patrimonio = PAT_CLASSES.reduce((s,[k])=>s+row[k],0);
   try{ await DB.addPat(row); toast("Fechamento registrado."); renderAll(); }catch(e){ toast("Erro: "+e.message); }
@@ -2167,6 +2223,12 @@ function renderTape(){
   const patTotal = patLast ? (patLast.patrimonio || PAT_CLASSES.reduce((s,[k])=>s+(patLast[k]||0),0)) : null;
   $("tpPat").textContent = patTotal!=null ? fmtBRL0(patTotal) : "—";
   $("tpRe").textContent = patLast && patLast.re ? fmtBRL0(patLast.re) : "—";
+  // tooltip com detalhe por banco na fita
+  if(patLast && patLast.re_detalhe && typeof patLast.re_detalhe==="object"){
+    const det = patLast.re_detalhe;
+    const tip = Object.entries(det).filter(([,v])=>v>0).map(([b,v])=>`${b}: ${fmtBRL0(v)}`).join("\n");
+    if(tip){ $("tpRe").title = tip; $("tpRe").style.cursor="help"; $("tpRe").style.textDecoration="underline dotted var(--dim)"; }
+  } else { $("tpRe").title=""; $("tpRe").style.cursor=""; $("tpRe").style.textDecoration=""; }
   if(last){ $("tpSaldo").textContent = fmtBRL0(last.saldo); $("tpSaldo").className = "v "+(last.saldo>=0?"pos":"neg"); }
   $("tpPoup").textContent = rec12? fmtPct((rec12-des12)/rec12) : "—";
   $("tpPoup").className = "v "+((rec12-des12)>=0?"pos":"neg");
