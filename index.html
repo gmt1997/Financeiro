@@ -528,6 +528,21 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="hint">Linha: BTC acumulado (passe o mouse p/ ver o saldo em R$) · Pontos: preço e total de cada ordem · Tracejada: preço médio</div>
     <div class="chartbox tall"><canvas id="chBtcAcc"></canvas></div>
   </div>
+  <div class="card">
+    <h3>Lucro / prejuízo por safra <span class="hint">— cada safra é o conjunto de compras dentro de um período; vendas consomem as safras mais antigas primeiro (FIFO)</span></h3>
+    <div class="bar mt">
+      <span class="seg" id="btcSafraGroup" data-role="seg">
+        <button class="on" data-v="mes">Mês</button>
+        <button data-v="tri">Trimestre</button>
+        <button data-v="ano">Ano</button>
+      </span>
+      <span class="spacer"></span>
+      <span class="pill" id="btcSafraTot"></span>
+    </div>
+    <div class="chartbox tall"><canvas id="chBtcSafras"></canvas></div>
+    <div class="twrap mt" style="max-height:360px;overflow-y:auto"><table id="tblBtcSafras"></table></div>
+    <p class="note mt">Custo remanescente e L/P consideram somente o BTC que <b>ainda está em carteira</b>. Vendas consomem, via FIFO, as safras mais antigas. Sem cotação definida acima, o valor atual e o L/P ficam em branco.</p>
+  </div>
   <div class="grid2">
     <div class="card">
       <h3>Aportes por mês (R$)</h3>
@@ -977,6 +992,70 @@ function btcStats(){
   const avgCost = qty>1e-9 ? costOfHeld/qty : null;
   return {qty, invested, redeemed, avgCost, costOfHeld, points};
 }
+
+/**
+ * Safras de bitcoin agrupadas por período, com FIFO nas vendas.
+ * Cada compra vira um lote (safra individual); vendas consomem os lotes mais antigos
+ * proporcionalmente. Depois agrupamos os remanescentes pela granularidade escolhida.
+ *
+ * period: "mes" | "tri" | "ano"
+ * Retorna array ordenado por data com:
+ *   {key, label, qtyOrig, qtyRem, custoOrig, custoRem, precoMedio, dataMin}
+ */
+function btcSafras(period){
+  // 1) construir lotes por compra, aplicando FIFO nas vendas
+  const lotes = [];
+  const ops = [...DB.btc]
+    .filter(b => b && typeof b.data==="string" && /^\d{4}-\d{2}-\d{2}/.test(b.data))
+    .sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
+  for(const b of ops){
+    if(b.operacao==="compra"){
+      const q = +b.quantidade || 0;
+      const c = +b.total || 0;
+      if(q>1e-12) lotes.push({data:b.data, qtyOrig:q, custoOrig:c, qtyRem:q, custoRem:c});
+    } else {
+      let restante = +b.quantidade || 0;
+      for(const l of lotes){
+        if(restante<=1e-12) break;
+        if(l.qtyRem<=1e-12) continue;
+        const consumir = Math.min(l.qtyRem, restante);
+        const propor = consumir / l.qtyRem;
+        l.custoRem -= l.custoRem * propor;
+        l.qtyRem -= consumir;
+        restante -= consumir;
+      }
+      // se restante>0, tentou vender mais do que tinha — ignora sobra
+    }
+  }
+  // 2) agrupar remanescentes por período
+  const groupKey = data => {
+    const [y,m] = data.split("-").map(Number);
+    if(period==="tri") return `${y}-T${Math.ceil(m/3)}`;
+    if(period==="ano") return `${y}`;
+    return `${y}-${String(m).padStart(2,"0")}`;   // mes (default)
+  };
+  const groupLabel = (key,dataMin) => {
+    if(period==="tri" || period==="ano") return key;
+    return ymLabel(key);
+  };
+  const agg = new Map();
+  for(const l of lotes){
+    const k = groupKey(l.data);
+    if(!agg.has(k)) agg.set(k, {key:k, qtyOrig:0, qtyRem:0, custoOrig:0, custoRem:0, dataMin:l.data});
+    const g = agg.get(k);
+    g.qtyOrig += l.qtyOrig;
+    g.qtyRem += l.qtyRem;
+    g.custoOrig += l.custoOrig;
+    g.custoRem += l.custoRem;
+    if(l.data < g.dataMin) g.dataMin = l.data;
+  }
+  const out = [...agg.values()]
+    .map(g => ({...g, label: groupLabel(g.key,g.dataMin), precoMedio: g.qtyRem>1e-9 ? g.custoRem/g.qtyRem : (g.qtyOrig>0?g.custoOrig/g.qtyOrig:null)}))
+    .sort((a,b)=>a.dataMin<b.dataMin?-1:a.dataMin>b.dataMin?1:0);
+  return out;
+}
+
+let btcSafraGroup = "mes";
 
 /* ================= charts ================= */
 Chart.defaults.color = "#6F6A61";
@@ -1842,10 +1921,90 @@ function renderBtc(){
   mkChart("chBtcApo",{type:"bar",data:{labels:apoRows.map(r=>ymLabel(r[0])),datasets:[{label:"Aporte líquido",data:apoRows.map(r=>r[1]),backgroundColor:apoRows.map(r=>r[1]>=0?"rgba(178,106,18,.75)":"rgba(192,57,75,.68)"),borderRadius:2}]},
     options:{maintainAspectRatio:false,scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{ticks:{callback:moneyTick}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ttMoney}}}}});
 
+  renderBtcSafras(px);
+
   const rows = [...DB.btc].reverse();
   $("tblBtc").innerHTML = `<thead><tr><th>Data</th><th>Op.</th><th>Corretora</th><th class="num">Qtde ₿</th><th class="num">Preço</th><th class="num">Total</th><th></th></tr></thead><tbody>`+
     rows.map(b=>`<tr><td>${b.data.split("-").reverse().join("/")}</td><td><span class="tag ${b.operacao==="compra"?"rec":"des"}">${b.operacao.toUpperCase()}</span></td><td>${b.corretora||""}</td><td class="num btcc">${fmtBtc(b.quantidade)}</td><td class="num">${fmtBRL0(b.preco)}</td><td class="num">${fmtBRL(b.total)}</td><td><button class="del" data-delbtc="${b.id}">✕</button></td></tr>`).join("")+"</tbody>";
 }
+function renderBtcSafras(px){
+  const safras = btcSafras(btcSafraGroup);
+  const box = $("chBtcSafras"); if(!box) return;
+  // filtra safras sem saldo remanescente (foram totalmente vendidas via FIFO) só se houver alguma com saldo
+  const comSaldo = safras.filter(s => s.qtyRem > 1e-9);
+  const rows = comSaldo.length ? comSaldo : safras;
+
+  const labels = rows.map(s => s.label);
+  const custos = rows.map(s => s.custoRem);
+  const valores = rows.map(s => px ? s.qtyRem * px : null);
+  const bgVal = rows.map(s => {
+    if(!px) return "rgba(159,153,141,.35)";
+    const lp = s.qtyRem*px - s.custoRem;
+    return lp>=0 ? "rgba(23,126,81,.72)" : "rgba(192,57,75,.72)";
+  });
+
+  mkChart("chBtcSafras",{
+    type:"bar",
+    data:{labels, datasets:[
+      {label:"Custo remanescente", data:custos, backgroundColor:"rgba(178,106,18,.35)", borderColor:"rgba(178,106,18,.9)", borderWidth:1, borderRadius:2, order:2},
+      {label:"Valor atual", data:valores, backgroundColor:bgVal, borderWidth:0, borderRadius:2, order:1},
+    ]},
+    options:{
+      maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
+      scales:{
+        x:{grid:{display:false}, ticks:{maxTicksLimit: btcSafraGroup==="ano"?12: btcSafraGroup==="tri"?16:24}},
+        y:{beginAtZero:true, ticks:{callback:moneyTick}}
+      },
+      plugins:{
+        legend:{labels:{boxWidth:10}},
+        tooltip:{callbacks:{
+          title: items => rows[items[0].dataIndex]?.label || "",
+          label: c => ` ${c.dataset.label}: ${fmtBRL(c.parsed.y ?? 0)}`,
+          afterBody: items => {
+            const s = rows[items[0].dataIndex]; if(!s) return "";
+            const lines = [
+              `Qtde restante: ${fmtBtc(s.qtyRem)}${s.qtyRem<s.qtyOrig-1e-9? " (de "+fmtBtc(s.qtyOrig)+")":""}`,
+              `Preço médio: ${s.precoMedio!=null?fmtBRL0(s.precoMedio):"—"}`
+            ];
+            if(px){
+              const lp = s.qtyRem*px - s.custoRem;
+              const pct = s.custoRem>0 ? lp/s.custoRem : null;
+              lines.push(`L/P: ${fmtBRL(lp)}${pct!=null? " ("+fmtPct(pct)+")":""}`);
+            }
+            return lines;
+          }
+        }}
+      }
+    }
+  });
+
+  // tabela
+  const totCusto = rows.reduce((s,r)=>s+r.custoRem,0);
+  const totQty = rows.reduce((s,r)=>s+r.qtyRem,0);
+  const totValor = px ? totQty*px : null;
+  const totLp = px ? totValor - totCusto : null;
+  const totLpPct = px && totCusto>0 ? totLp/totCusto : null;
+
+  $("tblBtcSafras").innerHTML = `<thead><tr><th>Safra</th><th class="num">Qtde ₿</th><th class="num">Preço médio</th><th class="num">Custo</th><th class="num">Valor hoje</th><th class="num">L/P</th><th class="num">%</th></tr></thead><tbody>`+
+    rows.map(s=>{
+      const val = px ? s.qtyRem*px : null;
+      const lp = val!=null ? val - s.custoRem : null;
+      const pct = lp!=null && s.custoRem>0 ? lp/s.custoRem : null;
+      const cls = lp==null? "muted" : lp>=0?"pos":"neg";
+      const parc = s.qtyRem<s.qtyOrig-1e-9 ? ` <span class="tag" title="Parte vendida via FIFO">parc</span>` : "";
+      return `<tr><td>${s.label}${parc}</td><td class="num btcc">${fmtBtc(s.qtyRem)}</td><td class="num">${s.precoMedio!=null?fmtBRL0(s.precoMedio):"—"}</td><td class="num">${fmtBRL0(s.custoRem)}</td><td class="num">${val==null?"—":fmtBRL0(val)}</td><td class="num ${cls}">${lp==null?"—":fmtBRL0(lp)}</td><td class="num ${cls}">${pct==null?"—":fmtPct(pct)}</td></tr>`;
+    }).join("")+
+    `</tbody><tfoot><tr><td><b>Total</b></td><td class="num btcc"><b>${fmtBtc(totQty)}</b></td><td></td><td class="num"><b>${fmtBRL0(totCusto)}</b></td><td class="num"><b>${totValor==null?"—":fmtBRL0(totValor)}</b></td><td class="num ${totLp==null?"muted":totLp>=0?"pos":"neg"}"><b>${totLp==null?"—":fmtBRL0(totLp)}</b></td><td class="num ${totLp==null?"muted":totLp>=0?"pos":"neg"}"><b>${totLpPct==null?"—":fmtPct(totLpPct)}</b></td></tr></tfoot>`;
+
+  // fita resumo
+  const nSafras = rows.length;
+  const pillTxt = px
+    ? `${nSafras} safra(s) · L/P total ${fmtBRL0(totLp)}${totLpPct!=null? " ("+fmtPct(totLpPct)+")":""}`
+    : `${nSafras} safra(s) · defina a cotação para ver L/P`;
+  $("btcSafraTot").textContent = pillTxt;
+  $("btcSafraTot").className = "pill " + (px ? (totLp>=0?"ok":"err") : "");
+}
+
 async function fetchBtcPx(){
   $("btcPxFetch").disabled = true; $("btcPxFetch").textContent = "Buscando…";
   try{
@@ -2637,6 +2796,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
   // btc
   $("btcPxApply").onclick = ()=>{ const v=parseFloat($("btcPxInput").value); if(!v) return toast("Informe um preço válido."); setBtcPx(v,"manual"); renderBtc(); renderPat(); renderTape(); toast("Cotação aplicada."); };
   $("btcPxFetch").onclick = fetchBtcPx;
+  $("btcSafraGroup").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return;
+    btcSafraGroup = b.dataset.v;
+    $("btcSafraGroup").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
+    renderBtcSafras(getBtcPx());
+  });
   $("bAdd").onclick = async ()=>{
     const q=parseFloat($("bQty").value), t=parseFloat($("bTotal").value);
     if(!$("bData").value||!q||!t) return toast("Preencha data, quantidade e total.");
