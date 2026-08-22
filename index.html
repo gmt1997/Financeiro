@@ -17,6 +17,31 @@
   --pos:#177E51; --neg:#C0394B; --blue:#3D5A80; --btc:#B26A12; --amber:#8A6A16;
   --r:12px; --mono:'IBM Plex Mono',monospace; --disp:'Instrument Sans',sans-serif; --body:'Instrument Sans',sans-serif;
 }
+/* ---------- Modo escuro ---------- */
+html[data-tema="escuro"]{
+  --bg:#131211; --panel:#1B1A18; --panel2:#232120; --line:#2E2C29; --line2:#3A3733;
+  --text:#EDEBE6; --muted:#A8A29A; --dim:#7C766D;
+  --pos:#3FB07A; --neg:#E0697C; --blue:#7CA0CE; --btc:#D9962F; --amber:#D9B44A;
+}
+html[data-tema="escuro"] ::selection{background:#3A3733}
+html[data-tema="escuro"] .btn.pri{background:var(--text);color:#131211}
+html[data-tema="escuro"] .seg button.on{background:var(--text);color:#131211}
+html[data-tema="escuro"] .toast{background:var(--text);color:#131211}
+
+/* ---------- Busca global + tema (nav) ---------- */
+.navtools{margin-left:auto;display:flex;align-items:center;gap:8px;padding-bottom:8px}
+.gsWrap{position:relative}
+.gsWrap input{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:6px 11px;font-size:.8rem;width:190px;outline:none}
+.gsWrap input:focus{border-color:var(--dim);width:250px}
+.gsRes{position:absolute;top:calc(100% + 6px);right:0;width:420px;max-height:60vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.13);z-index:60;padding:6px}
+.gsRes .gsSec{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:8px 10px 4px}
+.gsRes .gsIt{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:7px;cursor:pointer;font-size:.82rem}
+.gsRes .gsIt:hover,.gsRes .gsIt.sel{background:var(--panel2)}
+.gsRes .gsIt .d{color:var(--muted);font-size:.72rem}
+.gsRes .gsEmpty{padding:14px 10px;color:var(--muted);font-size:.82rem}
+.temaBtn{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:8px;width:32px;height:31px;font-size:.9rem;line-height:1}
+.temaBtn:hover{border-color:var(--dim)}
+@media(max-width:820px){ .navtools{width:100%;padding:0 0 8px} .gsWrap{flex:1} .gsWrap input,.gsWrap input:focus{width:100%} .gsRes{width:100%} }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-size:15px}
 body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh}
@@ -25,7 +50,7 @@ button{font-family:var(--body);cursor:pointer}
 input,select{font-family:var(--body)}
 
 /* ---------- Fita (ticker) ---------- */
-.tape{display:flex;align-items:center;gap:0;border-bottom:1px solid var(--line);background:#FFFFFF;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.tape{display:flex;align-items:center;gap:0;border-bottom:1px solid var(--line);background:var(--panel);overflow-x:auto;white-space:nowrap;scrollbar-width:none}
 .tape::-webkit-scrollbar{display:none}
 .tape .brand{padding:12px 20px;font-family:var(--disp);font-weight:600;letter-spacing:-.01em;border-right:1px solid var(--line);font-size:1rem}
 .tape .ti{display:flex;flex-direction:column;gap:1px;padding:8px 18px;border-right:1px solid var(--line);min-width:130px}
@@ -34,7 +59,7 @@ input,select{font-family:var(--body)}
 .tape .ti .v.pos{color:var(--pos)} .tape .ti .v.neg{color:var(--neg)} .tape .ti .v.btc{color:var(--btc)}
 
 /* ---------- Nav ---------- */
-nav{display:flex;gap:2px;padding:8px 14px 0;border-bottom:1px solid var(--line);background:#FFFFFF;overflow-x:auto;scrollbar-width:none}
+nav{display:flex;gap:2px;padding:8px 14px 0;border-bottom:1px solid var(--line);background:var(--panel);overflow-x:auto;scrollbar-width:none}
 nav::-webkit-scrollbar{display:none}
 nav button{background:none;border:none;color:var(--muted);padding:10px 15px 12px;font-size:.87rem;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
 nav button:hover{color:var(--text)}
@@ -67,20 +92,20 @@ h2{font-family:var(--disp);font-size:1.35rem;font-weight:600;letter-spacing:-.01
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
 .bar .spacer{flex:1}
 select,input[type=text],input[type=number],input[type=date],input[type=month],input[type=password],input[type=email]{
-  background:#FFFFFF;border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:8px 11px;font-size:.84rem;min-width:0}
+  background:var(--panel);border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:8px 11px;font-size:.84rem;min-width:0}
 select:focus,input:focus{outline:2px solid var(--blue);outline-offset:-1px}
-.btn{background:#FFFFFF;border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:8px 15px;font-size:.84rem;font-weight:500}
+.btn{background:var(--panel);border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:8px 15px;font-size:.84rem;font-weight:500}
 .btn:hover{border-color:var(--text)}
 .btn.pri{background:var(--text);border-color:var(--text);color:#FFF}
 .btn.pri:hover{filter:brightness(1.25)}
-.btn.orange{background:#FFF;border-color:var(--btc);color:var(--btc)}
+.btn.orange{background:var(--panel);border-color:var(--btc);color:var(--btc)}
 .btn.danger{color:var(--neg)}
-.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:#FFF}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:var(--panel)}
 .seg button{background:none;border:none;color:var(--muted);padding:7px 13px;font-size:.8rem}
 .seg button.on{background:var(--text);color:#FFF}
 
 /* ---------- Tables ---------- */
-.twrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#FFF}
+.twrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
 table{width:100%;border-collapse:collapse;font-size:.82rem}
 th{font-size:.63rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0}
 th.sortable{cursor:pointer;user-select:none}
@@ -126,7 +151,7 @@ tr.editing .ci{width:100%;padding:6px 8px;font-size:.8rem}
 .toast.show{opacity:1}
 .muted{color:var(--muted)}
 .mt{margin-top:14px}
-input[type=file]{background:#FFF;border:1px solid var(--line2);border-radius:8px;padding:7px 10px;font-size:.82rem;color:var(--muted)}
+input[type=file]{background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;font-size:.82rem;color:var(--muted)}
 input[type=file]::file-selector-button{background:var(--panel2);border:1px solid var(--line2);border-radius:6px;padding:5px 12px;margin-right:10px;color:var(--text);cursor:pointer;font-family:var(--body);font-size:.8rem}
 input[type=file]::file-selector-button:hover{border-color:var(--text)}
 .improw{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;margin-top:8px;background:#FFF}
@@ -299,6 +324,13 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
   <button data-p="btc">Bitcoin</button>
   <button data-p="liv">Livros</button>
   <button data-p="cfg">Configurações</button>
+  <span class="navtools">
+    <span class="gsWrap">
+      <input type="search" id="gsInput" placeholder="Buscar em tudo…" autocomplete="off">
+      <div class="gsRes" id="gsRes" hidden></div>
+    </span>
+    <button class="temaBtn" id="temaBtn" title="Alternar tema claro/escuro" aria-label="Alternar tema">◐</button>
+  </span>
 </nav>
 
 <main>
@@ -420,6 +452,18 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
       <div class="twrap" style="max-height:260px;overflow-y:auto"><table id="tblCcParc"></table></div>
     </div>
   </div>
+  <div class="card" id="catSugCard">
+    <h3>Categorizar compras <span class="hint">— sugestões por palavra-chave e pelo que você já categorizou antes</span></h3>
+    <div class="bar">
+      <span class="pill" id="catSugResumo"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="catSugCalc">Sugerir categorias</button>
+      <button class="btn pri" id="catSugAplicar" disabled>Aplicar selecionadas</button>
+    </div>
+    <div id="catSugVazio" class="note mt">Clique em <b>Sugerir categorias</b> para analisar as compras sem categoria.</div>
+    <div class="twrap mt" id="catSugWrap" style="max-height:420px;overflow-y:auto;display:none"><table id="tblCatSug"></table></div>
+    <p class="note mt">As sugestões vêm primeiro do seu próprio histórico (descrições parecidas que você já categorizou) e depois de uma lista de palavras-chave. Revise antes de aplicar — nada é gravado sem você confirmar.</p>
+  </div>
   <div class="card">
     <h3>Compras do mês</h3>
     <div class="bar"><select id="ccMes"></select></div>
@@ -475,6 +519,33 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="hint">Valores mensais do ano · intensidade = peso no mês · Média/mês = total ÷ meses com movimento · Δ YoY = total do ano vs ano anterior</div>
     <div class="twrap"><table id="tblHoriz"></table></div>
   </div>
+
+  <div class="card">
+    <h3>Custo fixo × gasto variável <span class="hint">— quanto do seu mês é compromisso e quanto é escolha</span></h3>
+    <div class="bar">
+      <select id="recRange">
+        <option value="6">Últimos 6 meses</option>
+        <option value="12" selected>Últimos 12 meses</option>
+        <option value="24">Últimos 24 meses</option>
+      </select>
+      <span class="spacer"></span>
+      <span class="pill" id="recResumo"></span>
+    </div>
+    <div class="kpis mt" id="recKpis"></div>
+    <div class="chartbox tall mt"><canvas id="chRec"></canvas></div>
+    <p class="note mt">Recorrente = despesa que apareceu em pelo menos <b>60% dos meses</b> do período, com valor estável. O resto é eventual.</p>
+  </div>
+
+  <div class="card">
+    <h3>Radar de assinaturas <span class="hint">— cobranças que se repetem com valor parecido todo mês</span></h3>
+    <div class="bar">
+      <span class="pill" id="assResumo"></span>
+      <span class="spacer"></span>
+      <span class="muted" id="assAnual" style="font-size:.8rem"></span>
+    </div>
+    <div class="twrap mt" style="max-height:420px;overflow-y:auto"><table id="tblAssin"></table></div>
+    <p class="note mt">Detectado automaticamente pelas descrições que se repetem em meses consecutivos. Uma cobrança que sumiu há mais de 2 meses aparece marcada como <b>inativa</b> — pode ser assinatura cancelada ou cartão trocado.</p>
+  </div>
 </section>
 
 <!-- ============ PATRIMÔNIO ============ -->
@@ -499,6 +570,22 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
       <div class="hint">% informado no fechamento de cada mês</div>
       <div class="chartbox short"><canvas id="chRent"></canvas></div>
     </div>
+  </div>
+  <div class="card">
+    <h3>Rentabilidade acumulada <span class="hint">— efeito composto dos retornos mensais informados</span></h3>
+    <div class="bar">
+      <select id="patAcRange">
+        <option value="12">Últimos 12 meses</option>
+        <option value="24">Últimos 24 meses</option>
+        <option value="36">Últimos 36 meses</option>
+        <option value="0" selected>Todo o histórico</option>
+      </select>
+      <span class="spacer"></span>
+      <span class="pill" id="patAcResumo"></span>
+    </div>
+    <div class="kpis mt" id="patAcKpis"></div>
+    <div class="chartbox tall mt"><canvas id="chPatAcum"></canvas></div>
+    <p class="note mt">Composto por <code>(1+r₁)×(1+r₂)…−1</code> sobre a rentabilidade que você informa em cada fechamento. O CAGR anualiza esse acumulado pelo número de meses do período.</p>
   </div>
   <div class="card">
     <h3>Novo fechamento mensal</h3>
@@ -1720,6 +1807,8 @@ function renderAnal(){
   const totYear = monthTot.reduce((s,v)=>s+v,0);
   h += `<tr><td><b>Total mês</b></td>${monthTot.map(v=>`<td class="num"><b>${v?Math.round(v).toLocaleString("pt-BR"):"·"}</b></td>`).join("")}<td class="num"><b>${fmtBRL0(totYear)}</b></td><td class="num"><b>${fmtBRL0(totYear/activeMonths)}</b></td><td></td></tr>`;
   $("tblHoriz").innerHTML = h+"</tbody>";
+  renderRecorrentes();
+  renderAssinaturas();
 }
 
 /* ================= PATRIMÔNIO ================= */
@@ -1851,6 +1940,7 @@ function renderPat(){
         if(k==="re") return `<td class="num"${reTooltip(r)}>${val}</td>`;
         return `<td class="num">${val}</td>`;
       }).join("")}<td class="num"><b>${fmtBRL0(tot)}</b></td><td class="num ${r.rentabilidade>=0?'pos':'neg'}">${r.rentabilidade==null?"—":fmtPct(r.rentabilidade)}</td><td><button class="del" data-delpat="${r.id}">✕</button></td></tr>`;}).join("")+"</tbody>";
+  renderPatAcum();
 }
 async function onAddPat(){
   const mes = $("pMes").value; if(!mes) return toast("Informe o mês.");
@@ -2679,6 +2769,417 @@ function exportPat(){ download("patrimonio.csv", "\uFEFF"+csv([["mes",...PAT_CLA
 function exportJson(){ download("backup_financeiro.json", JSON.stringify({tx:DB.tx,btc:DB.btc,pat:DB.pat},null,1), "application/json"); }
 
 /* ================= render root ================= */
+/* ================= TEMA (claro/escuro) ================= */
+function temaAtual(){ return safeStore.get("fin_tema") === "escuro" ? "escuro" : "claro"; }
+function aplicarTema(t){
+  const escuro = t === "escuro";
+  document.documentElement.setAttribute("data-tema", escuro ? "escuro" : "claro");
+  const b = $("temaBtn"); if(b) b.textContent = escuro ? "☀" : "◐";
+  // Chart.js precisa dos novos tons de texto/grade
+  const cs = getComputedStyle(document.documentElement);
+  Chart.defaults.color = cs.getPropertyValue("--muted").trim() || "#6F6A61";
+  Chart.defaults.borderColor = cs.getPropertyValue("--line").trim() || "#ECEAE5";
+}
+function alternarTema(){
+  const novo = temaAtual()==="escuro" ? "claro" : "escuro";
+  safeStore.set("fin_tema", novo);
+  aplicarTema(novo);
+  try{ renderAll(); }catch(e){}   // redesenha os gráficos com a nova paleta
+}
+
+/* ================= BUSCA GLOBAL ================= */
+const PAGE_OF = {tx:"lanc", cc:"cc", btc:"btc", liv:"liv", wl:"liv", pat:"pat"};
+function irParaAba(p){
+  const btn = document.querySelector(`nav button[data-p="${p}"]`);
+  if(btn) btn.click();
+}
+function buscaGlobal(q){
+  const k = _nk(q);
+  if(!k || k.length < 2) return [];
+  const out = [];
+  const push = (tipo, titulo, detalhe, acao) => out.push({tipo, titulo, detalhe, acao});
+
+  // lançamentos (inclui virtuais de cartão)
+  for(const t of allTx()){
+    if(out.length > 400) break;
+    const alvo = _nk((t.descricao||"")+" "+(t.categoria||"")+" "+(t.forma||"")+" "+(t.cartao||""));
+    if(alvo.includes(k)) push("Lançamentos", t.descricao||"(sem descrição)",
+      `${t.data.split("-").reverse().join("/")} · ${t.categoria||"—"} · ${t.tipo==="RECEITA"?"+":"−"}${fmtBRL(t.valor)}`, ()=>irParaAba("lanc"));
+  }
+  // compras de cartão (histórico)
+  for(const c of ccUnified()){
+    if(out.length > 500) break;
+    const alvo = _nk((c.descricao||"")+" "+(c.categoria||"")+" "+(c.cartao||""));
+    if(alvo.includes(k)) push("Cartões", c.descricao||"(sem descrição)",
+      `${c.data? c.data.split("-").reverse().join("/") : ymLabel(c.mes)} · ${c.cartao||"—"} · ${fmtBRL(c.valor)}`, ()=>irParaAba("cc"));
+  }
+  // livros lidos
+  for(const l of (DB.liv||[])){
+    const alvo = _nk((l.titulo||"")+" "+(l.autor||"")+" "+(l.tema||""));
+    if(alvo.includes(k)) push("Livros", l.titulo||"(sem título)",
+      `${l.autor||"—"} · ${l.tema||"—"} · ${l.data? l.data.slice(0,7):""}${(+l.paginas===0)?" · audiolivro":""}`, ()=>irParaAba("liv"));
+  }
+  // wishlist
+  for(const w of (DB.livWl||[])){
+    const alvo = _nk((w.titulo||"")+" "+(w.autor||"")+" "+(w.tema||""));
+    if(alvo.includes(k)) push("Próximas leituras", w.titulo||"(sem título)", `${w.autor||"—"} · ${w.tema||"—"}`, ()=>irParaAba("liv"));
+  }
+  // ordens de bitcoin (por corretora/data)
+  for(const b of (DB.btc||[])){
+    const alvo = _nk((b.corretora||"")+" "+b.operacao+" "+b.data);
+    if(alvo.includes(k)) push("Bitcoin", `${b.operacao.toUpperCase()} ${fmtBtc(b.quantidade)}`,
+      `${b.data.split("-").reverse().join("/")} · ${b.corretora||"—"} · ${fmtBRL(b.total)}`, ()=>irParaAba("btc"));
+  }
+  // categorias (atalho para a análise)
+  for(const c of [...DCATS, ...RCATS]){
+    if(_nk(c).includes(k)) push("Categorias", c, "abrir em Análises H/V", ()=>irParaAba("anal"));
+  }
+  return out;
+}
+let gsSel = 0, gsItens = [];
+function renderBuscaGlobal(){
+  const q = $("gsInput").value.trim();
+  const box = $("gsRes");
+  if(!q || q.length<2){ box.hidden = true; box.innerHTML=""; gsItens=[]; return; }
+  const res = buscaGlobal(q);
+  gsItens = res.slice(0, 40);
+  gsSel = 0;
+  if(!gsItens.length){
+    box.innerHTML = `<div class="gsEmpty">Nada encontrado para “${q}”.</div>`;
+    box.hidden = false; return;
+  }
+  // agrupa por tipo preservando ordem
+  let html = "", tipoAtual = null, i = 0;
+  for(const it of gsItens){
+    if(it.tipo !== tipoAtual){ tipoAtual = it.tipo; html += `<div class="gsSec">${tipoAtual}</div>`; }
+    html += `<div class="gsIt${i===0?" sel":""}" data-i="${i}"><span>${it.titulo}</span><span class="d">${it.detalhe}</span></div>`;
+    i++;
+  }
+  const total = res.length;
+  if(total > gsItens.length) html += `<div class="gsEmpty">+${total-gsItens.length} outros resultados — refine a busca.</div>`;
+  box.innerHTML = html;
+  box.hidden = false;
+}
+function gsAbrir(i){
+  const it = gsItens[i]; if(!it) return;
+  $("gsRes").hidden = true; $("gsInput").value = ""; gsItens = [];
+  it.acao();
+}
+
+/* ================= SUGESTÃO DE CATEGORIAS ================= */
+/** Palavras-chave → categoria (fallback quando o histórico não ajuda).
+ *  Termos são casados com limite de palavra, então "99app" não casa dentro de "1999".
+ *  Evite termos curtos/genéricos aqui — eles geram falso positivo. */
+const CAT_KEYWORDS = [
+  [["ifood","rappi","uber eats","zedelivery","ze delivery","restaurante","padaria","pizzaria","burger","mcdonald","subway","starbucks","cafeteria","lanchonete","acai","sushi","churrascaria","assai","atacadao","carrefour","pao de acucar","supermercado","hortifruti","emporio","sacolao","st marche","natural da terra","zona sul","big box"],"ALIMENTAÇÃO"],
+  [["uber","99app","99 pop","99pop","cabify","posto shell","posto ipiranga","petrobras","estacionamento","estapar","autopass","bilhete unico","cptm","viacao","localiza","movida","unidas","sem parar","conectcar","veloe","gol linhas","latam","azul linhas","decolar","123milhas","aeroporto"],"TRANSPORTE"],
+  [["drogaria","drogasil","droga raia","droga pacheco","panvel","farmacia","ultrafarma","hospital","clinica","laboratorio","fleury","delboni","dasa","einstein","unimed","sulamerica saude","bradesco saude","odonto","dentista","psicologo","psicologa","terapia","smartfit","smart fit","bluefit","academia","bodytech","gympass","wellhub","totalpass"],"SAÚDE"],
+  [["netflix","spotify","disney plus","disneyplus","hbo","prime video","amazon prime","globoplay","paramount","apple.com","itunes","google play","youtube","deezer","twitch","steam games","playstation","nintendo","cinema","cinemark","kinoplex","ingresso.com","ticketmaster","sympla","eventim","teatro","cervejaria","boteco"],"LAZER"],
+  [["aluguel","condominio","iptu","enel","cemig","copel","eletropaulo","sabesp","comgas","internet","vivo fibra","telefonica","seguro residencial","imobiliaria","material de construcao","leroy","telhanorte","obramax"],"MORADIA"],
+  [["renner","riachuelo","zara","hering","arezzo","schutz","nike","adidas","centauro","decathlon","netshoes","dafiti","shein","zattini","sapataria","otica","joalheria","vivara","pandora"],"VESTUÁRIO"],
+  [["amazon","mercadolivre","mercado livre","magazine luiza","magalu","americanas","shopee","aliexpress","kabum","pichau","terabyte","fastshop","casas bahia","ponto frio","icloud","google one","dropbox","microsoft","office 365","adobe","chatgpt","openai","anthropic","notion","canva","figma","github","digitalocean","cloudflare","correios","lavanderia","diarista","cabeleireiro","barbearia","manicure","petz","cobasi","veterinario"],"FACILIDADES"],
+];
+/** Normaliza descrição para comparação: remove ruído de fatura (asteriscos, números de parcela, datas). */
+function _descKey(d){
+  return _nk(String(d||"")
+    .replace(/\*+/g," ")
+    .replace(/\b\d{1,2}\/\d{1,2}\b/g," ")
+    .replace(/\b\d{4,}\b/g," ")
+    .replace(/\s+/g," ")).trim();
+}
+/** true se `termo` aparece em `texto` respeitando limites de palavra. */
+function _contemTermo(texto, termo){
+  const t = _nk(termo).trim(); if(!t) return false;
+  const esc = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(texto);
+}
+/** Índice aprendido: descrição normalizada → categoria mais frequente já usada por você. */
+function catHistIndex(){
+  const idx = new Map();   // chave -> Map(categoria -> contagem)
+  const add = (desc, cat) => {
+    if(!cat) return;
+    const k = _descKey(desc); if(!k || k.length < 3) return;
+    if(!idx.has(k)) idx.set(k, new Map());
+    const m = idx.get(k); m.set(cat, (m.get(cat)||0)+1);
+  };
+  for(const c of DB.cc) if(c && c.categoria) add(c.descricao, c.categoria);
+  for(const t of DB.tx) if(t && t.categoria && t.tipo==="DESPESA") add(t.descricao, t.categoria);
+  // resolve para a categoria dominante
+  const out = new Map();
+  for(const [k,m] of idx){
+    let best=null, bn=0;
+    for(const [cat,n] of m) if(n>bn){ bn=n; best=cat; }
+    if(best) out.set(k, {cat:best, n:bn});
+  }
+  return out;
+}
+/** Sugere categoria para uma descrição. Retorna {cat, origem, conf} ou null. */
+function sugerirCategoria(desc, hist){
+  const k = _descKey(desc);
+  if(!k) return null;
+  // 1) match exato no histórico
+  if(hist.has(k)){ const h=hist.get(k); return {cat:h.cat, origem:`histórico (${h.n}×)`, conf:"alta"}; }
+  // 2) match parcial: exige que a chave do histórico apareça como palavra inteira
+  //    dentro da descrição (ou vice-versa) e tenha ao menos 6 caracteres — evita
+  //    que "assai" case com qualquer coisa que contenha essas letras.
+  let melhor=null;
+  for(const [hk,h] of hist){
+    if(hk.length < 6) continue;
+    const casa = _contemTermo(k, hk) || (k.length>=6 && _contemTermo(hk, k));
+    if(casa && (!melhor || hk.length > melhor.len)) melhor = {cat:h.cat, n:h.n, len:hk.length};
+  }
+  if(melhor) return {cat:melhor.cat, origem:`histórico parecido (${melhor.n}×)`, conf:"média"};
+  // 3) palavras-chave (com limite de palavra)
+  for(const [termos, cat] of CAT_KEYWORDS){
+    for(const t of termos){ if(_contemTermo(k, t)) return {cat, origem:`palavra-chave “${t.trim()}”`, conf:"média"}; }
+  }
+  return null;
+}
+let catSugLista = [];   // [{id, descricao, valor, mes, cat, origem, conf, marcado}]
+function calcularSugestoes(){
+  const hist = catHistIndex();
+  const semCat = DB.cc.filter(c => c && !c.categoria && c.descricao);
+  catSugLista = [];
+  for(const c of semCat){
+    const s = sugerirCategoria(c.descricao, hist);
+    if(s) catSugLista.push({id:c.id, descricao:c.descricao, valor:c.valor, mes:c.mes, cat:s.cat, origem:s.origem, conf:s.conf, marcado:true});
+  }
+  catSugLista.sort((a,b)=> (a.conf===b.conf ? (b.valor-a.valor) : (a.conf==="alta"?-1:1)));
+  renderCatSug(semCat.length);
+}
+function renderCatSug(totalSemCat){
+  const wrap = $("catSugWrap"), vazio = $("catSugVazio");
+  const nSug = catSugLista.length;
+  const semSug = (totalSemCat ?? 0) - nSug;
+  $("catSugResumo").textContent = totalSemCat==null ? "" :
+    `${totalSemCat} sem categoria · ${nSug} com sugestão${semSug>0? ` · ${semSug} sem palpite`:""}`;
+  $("catSugResumo").className = "pill" + (nSug? " ok":"");
+  if(!nSug){
+    wrap.style.display="none";
+    vazio.style.display="";
+    vazio.innerHTML = totalSemCat===0
+      ? "✅ Todas as compras de cartão já têm categoria."
+      : (totalSemCat==null ? "Clique em <b>Sugerir categorias</b> para analisar as compras sem categoria."
+         : `Nenhuma sugestão automática para as ${totalSemCat} compras sem categoria — categorize algumas manualmente na tabela abaixo e rode de novo (o app aprende com elas).`);
+    $("catSugAplicar").disabled = true;
+    return;
+  }
+  vazio.style.display="none";
+  wrap.style.display="";
+  const opts = cat => DCATS.map(c=>`<option value="${c}"${c===cat?" selected":""}>${c}</option>`).join("");
+  $("tblCatSug").innerHTML =
+    `<thead><tr><th style="width:34px"><input type="checkbox" id="catSugAll" checked></th><th>Descrição</th><th>Mês</th><th class="num">Valor</th><th>Categoria sugerida</th><th>Origem</th></tr></thead><tbody>`+
+    catSugLista.map((s,i)=>`<tr>
+      <td><input type="checkbox" data-cs="${i}"${s.marcado?" checked":""}></td>
+      <td>${s.descricao}</td>
+      <td>${ymLabel(s.mes)}</td>
+      <td class="num neg">${fmtBRL(s.valor)}</td>
+      <td><select data-cscat="${i}">${opts(s.cat)}</select></td>
+      <td><span class="tag${s.conf==="alta"?" rec":""}">${s.origem}</span></td>
+    </tr>`).join("")+`</tbody>`;
+  $("catSugAplicar").disabled = !catSugLista.some(s=>s.marcado);
+}
+async function aplicarSugestoes(){
+  const alvo = catSugLista.filter(s=>s.marcado);
+  if(!alvo.length) return toast("Nada selecionado.");
+  if(!confirm(`Aplicar categoria em ${alvo.length} compra(s)?`)) return;
+  const btn = $("catSugAplicar"); btn.disabled = true; btn.textContent = "Aplicando…";
+  let ok=0, falhas=0;
+  for(const s of alvo){
+    try{ await DB.updateCC(s.id, {categoria: s.cat}); ok++; }
+    catch(e){ falhas++; console.error("falha ao categorizar", s.id, e); }
+  }
+  btn.textContent = "Aplicar selecionadas";
+  toast(`${ok} categorizada(s)${falhas?` · ${falhas} falha(s)`:""}.`);
+  calcularSugestoes();
+  renderAll();
+}
+
+/* ================= RECORRENTES × EVENTUAIS / ASSINATURAS ================= */
+let recRangeMeses = 12;
+/** Lista dos últimos N meses (YYYY-MM) terminando no mês corrente. */
+function ultimosMeses(n){
+  const out=[]; const d=new Date();
+  for(let i=n-1;i>=0;i--){ const x=new Date(d.getFullYear(), d.getMonth()-i, 1);
+    out.push(x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")); }
+  return out;
+}
+/**
+ * Agrupa despesas por descrição normalizada dentro da janela e classifica em
+ * recorrente (aparece em >=60% dos meses) ou eventual.
+ * Retorna {meses, grupos:[{chave, descricao, categoria, meses:Set, n, total, medio,
+ *          cv, recorrente, ultimoMes, ativa}], porMes:Map(ym->{fixo,var})}
+ */
+function analiseRecorrencia(nMeses){
+  const meses = ultimosMeses(nMeses);
+  const inicio = meses[0], fim = meses[meses.length-1];
+  const grupos = new Map();
+  for(const t of allTx()){
+    if(t.tipo!=="DESPESA") continue;
+    const ym = t.data.slice(0,7);
+    if(ym < inicio || ym > fim) continue;
+    const k = _descKey(t.descricao);
+    if(!k || k.length < 3) continue;
+    if(!grupos.has(k)) grupos.set(k, {chave:k, descricao:t.descricao||k, categoria:t.categoria||null,
+      porMes:new Map(), valores:[], total:0});
+    const g = grupos.get(k);
+    g.porMes.set(ym, (g.porMes.get(ym)||0) + t.valor);
+    g.valores.push(t.valor);
+    g.total += t.valor;
+    if(!g.categoria && t.categoria) g.categoria = t.categoria;
+  }
+  const mesAtual = meses[meses.length-1];
+  const idxMes = ym => meses.indexOf(ym);
+  const out = [];
+  for(const g of grupos.values()){
+    const nm = g.porMes.size;
+    const cobertura = nm / nMeses;
+    const media = g.total / nm;
+    // coeficiente de variação dos totais mensais (estabilidade do valor)
+    const vals = [...g.porMes.values()];
+    const mu = vals.reduce((s,v)=>s+v,0)/vals.length;
+    const sd = Math.sqrt(vals.reduce((s,v)=>s+(v-mu)**2,0)/vals.length);
+    const cv = mu>0 ? sd/mu : 0;
+    const recorrente = nm>=2 && cobertura>=0.6;
+    const mesesOrd = [...g.porMes.keys()].sort();
+    const ultimoMes = mesesOrd[mesesOrd.length-1];
+    const ativa = idxMes(mesAtual) - idxMes(ultimoMes) <= 2;
+    out.push({...g, n:nm, cobertura, medio:media, mediaMensal:mu, cv, recorrente, ultimoMes, ativa});
+  }
+  // série mensal fixo × variável
+  const porMes = new Map(meses.map(m=>[m,{fixo:0,vari:0}]));
+  for(const g of out){
+    for(const [ym,v] of g.porMes){
+      const o = porMes.get(ym); if(!o) continue;
+      if(g.recorrente) o.fixo += v; else o.vari += v;
+    }
+  }
+  return {meses, grupos:out, porMes};
+}
+function renderRecorrentes(){
+  if(!$("chRec")) return;
+  const {meses, grupos, porMes} = analiseRecorrencia(recRangeMeses);
+  const fixos = grupos.filter(g=>g.recorrente);
+  const serieFixo = meses.map(m=>porMes.get(m).fixo);
+  const serieVar  = meses.map(m=>porMes.get(m).vari);
+  const nComp = meses.length;
+  const mediaFixo = serieFixo.reduce((s,v)=>s+v,0)/nComp;
+  const mediaVar  = serieVar.reduce((s,v)=>s+v,0)/nComp;
+  const mediaTot  = mediaFixo + mediaVar;
+  const pctFixo   = mediaTot>0 ? mediaFixo/mediaTot : 0;
+
+  $("recResumo").textContent = `${fixos.length} despesa(s) recorrente(s) identificada(s)`;
+  $("recResumo").className = "pill ok";
+  $("recKpis").innerHTML = `
+    <div class="kpi"><div class="l">Custo fixo médio</div><div class="v neg">${fmtBRL0(mediaFixo)}</div><div class="s">${fmtPct(pctFixo)} das despesas</div></div>
+    <div class="kpi"><div class="l">Gasto variável médio</div><div class="v">${fmtBRL0(mediaVar)}</div><div class="s">${fmtPct(1-pctFixo)} das despesas</div></div>
+    <div class="kpi"><div class="l">Despesa média total</div><div class="v">${fmtBRL0(mediaTot)}</div><div class="s">últimos ${nComp} meses</div></div>
+    <div class="kpi"><div class="l">Custo fixo anualizado</div><div class="v">${fmtBRL0(mediaFixo*12)}</div><div class="s">o que você precisa garantir por ano</div></div>`;
+
+  mkChart("chRec",{type:"bar",
+    data:{labels:meses.map(ymLabel),datasets:[
+      {label:"Custo fixo (recorrente)",data:serieFixo,backgroundColor:"rgba(61,90,128,.78)",stack:"d",borderRadius:2},
+      {label:"Gasto variável (eventual)",data:serieVar,backgroundColor:"rgba(192,57,75,.62)",stack:"d",borderRadius:2},
+    ]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:{callback:moneyTick}}},
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{
+        label:ttMoney,
+        afterBody:items=>{
+          const i=items[0].dataIndex; const tot=serieFixo[i]+serieVar[i];
+          return tot>0 ? [`Total: ${fmtBRL(tot)}`, `Fixo: ${fmtPct(serieFixo[i]/tot)}`] : "";
+        }}}}}});
+}
+function renderAssinaturas(){
+  if(!$("tblAssin")) return;
+  const {grupos} = analiseRecorrencia(12);
+  // assinatura = recorrente + valor estável (cv baixo) + ticket típico de assinatura
+  const assin = grupos
+    .filter(g => g.recorrente && g.cv <= 0.25 && g.mediaMensal <= 2000)
+    .sort((a,b)=> b.mediaMensal - a.mediaMensal);
+  const ativas = assin.filter(a=>a.ativa);
+  const mensal = ativas.reduce((s,a)=>s+a.mediaMensal,0);
+
+  $("assResumo").textContent = `${ativas.length} assinatura(s) ativa(s) · ${fmtBRL0(mensal)}/mês`;
+  $("assResumo").className = "pill" + (ativas.length? " ok":"");
+  $("assAnual").textContent = ativas.length ? `≈ ${fmtBRL0(mensal*12)} por ano` : "";
+
+  if(!assin.length){
+    $("tblAssin").innerHTML = `<tbody><tr><td class="muted" style="padding:16px">Nenhuma cobrança recorrente com valor estável identificada nos últimos 12 meses.</td></tr></tbody>`;
+    return;
+  }
+  $("tblAssin").innerHTML =
+    `<thead><tr><th>Cobrança</th><th>Categoria</th><th class="num">Valor/mês</th><th class="num">Meses</th><th class="num">Total 12m</th><th class="num">Projeção/ano</th><th>Status</th></tr></thead><tbody>`+
+    assin.map(a=>`<tr>
+      <td>${a.descricao}</td>
+      <td>${a.categoria? `<span class="tag">${a.categoria}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="num neg">${fmtBRL(a.mediaMensal)}</td>
+      <td class="num">${a.n}/12</td>
+      <td class="num">${fmtBRL0(a.total)}</td>
+      <td class="num">${fmtBRL0(a.mediaMensal*12)}</td>
+      <td>${a.ativa? '<span class="tag rec">ativa</span>' : `<span class="tag des" title="Última cobrança em ${ymLabel(a.ultimoMes)}">inativa</span>`}</td>
+    </tr>`).join("")+
+    `</tbody><tfoot><tr><td><b>Total ativas</b></td><td></td><td class="num neg"><b>${fmtBRL(mensal)}</b></td><td></td><td></td><td class="num"><b>${fmtBRL0(mensal*12)}</b></td><td></td></tr></tfoot>`;
+}
+
+/* ================= RENTABILIDADE ACUMULADA ================= */
+let patAcRange = 0;   // 0 = todo histórico
+function renderPatAcum(){
+  if(!$("chPatAcum")) return;
+  let rp = (DB.pat||[]).filter(p=>p && p.rentabilidade!=null && typeof p.mes==="string")
+    .sort((a,b)=>a.mes<b.mes?-1:1);
+  if(patAcRange>0) rp = rp.slice(-patAcRange);
+  if(!rp.length){
+    $("patAcResumo").textContent = "sem rentabilidade informada";
+    $("patAcResumo").className = "pill";
+    $("patAcKpis").innerHTML = "";
+    mkChart("chPatAcum",{type:"line",data:{labels:[],datasets:[]},options:{maintainAspectRatio:false}});
+    return;
+  }
+  // curva composta (base 100)
+  let fator = 1;
+  const curva = rp.map(p=>{ fator *= (1 + p.rentabilidade); return (fator-1)*100; });
+  const acum = fator - 1;
+  const n = rp.length;
+  const cagr = n>=1 ? Math.pow(fator, 12/n) - 1 : null;
+  // melhor e pior mês
+  let melhor=rp[0], pior=rp[0];
+  for(const p of rp){ if(p.rentabilidade>melhor.rentabilidade) melhor=p; if(p.rentabilidade<pior.rentabilidade) pior=p; }
+  const positivos = rp.filter(p=>p.rentabilidade>0).length;
+  // drawdown máximo sobre a curva composta
+  let pico=-Infinity, ddMax=0;
+  let f=1;
+  for(const p of rp){ f*=(1+p.rentabilidade); if(f>pico) pico=f; const dd=(f-pico)/pico; if(dd<ddMax) ddMax=dd; }
+
+  $("patAcResumo").textContent = `${n} meses · ${ymLabel(rp[0].mes)} → ${ymLabel(rp[n-1].mes)}`;
+  $("patAcResumo").className = "pill" + (acum>=0? " ok":" err");
+  $("patAcKpis").innerHTML = `
+    <div class="kpi"><div class="l">Retorno acumulado</div><div class="v ${acum>=0?'pos':'neg'}">${fmtPct(acum)}</div><div class="s">no período selecionado</div></div>
+    <div class="kpi"><div class="l">CAGR (anualizado)</div><div class="v ${cagr>=0?'pos':'neg'}">${cagr==null?"—":fmtPct(cagr)}</div><div class="s">base ${n} meses</div></div>
+    <div class="kpi"><div class="l">Meses positivos</div><div class="v">${positivos}/${n}</div><div class="s">${fmtPct(positivos/n)} de acerto</div></div>
+    <div class="kpi"><div class="l">Melhor mês</div><div class="v pos">${fmtPct(melhor.rentabilidade)}</div><div class="s">${ymLabel(melhor.mes)}</div></div>
+    <div class="kpi"><div class="l">Pior mês</div><div class="v neg">${fmtPct(pior.rentabilidade)}</div><div class="s">${ymLabel(pior.mes)}</div></div>
+    <div class="kpi"><div class="l">Máx. drawdown</div><div class="v neg">${fmtPct(ddMax)}</div><div class="s">maior queda desde um pico</div></div>`;
+
+  const cor = acum>=0 ? "#177E51" : "#C0394B";
+  const corFill = acum>=0 ? "rgba(23,126,81,.12)" : "rgba(192,57,75,.12)";
+  mkChart("chPatAcum",{
+    data:{labels:rp.map(p=>ymLabel(p.mes)),datasets:[
+      {type:"line",label:"Retorno acumulado",data:curva,borderColor:cor,backgroundColor:corFill,fill:true,tension:.25,pointRadius:0,borderWidth:2,yAxisID:"y"},
+      {type:"bar",label:"Retorno do mês",data:rp.map(p=>p.rentabilidade*100),yAxisID:"y1",
+        backgroundColor:rp.map(p=>p.rentabilidade>=0?"rgba(23,126,81,.38)":"rgba(192,57,75,.34)"),borderRadius:2},
+    ]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{
+        x:{grid:{display:false},ticks:{maxTicksLimit:18}},
+        y:{position:"left",title:{display:true,text:"acumulado %"},ticks:{callback:v=>v.toFixed(0)+"%"}},
+        y1:{position:"right",grid:{drawOnChartArea:false},title:{display:true,text:"mês %"},ticks:{callback:v=>v.toFixed(1)+"%"}}
+      },
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{
+        label:c=>` ${c.dataset.label}: ${c.parsed.y>=0?"+":""}${c.parsed.y.toFixed(2)}%`
+      }}}}});
+}
+
 function renderAll(){
   const steps = [
     ["virtual", refreshVirtual],
@@ -2707,6 +3208,51 @@ document.addEventListener("DOMContentLoaded", ()=>{
     const b = e.target.closest("button"); if(!b) return;
     document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));
     document.querySelectorAll(".page").forEach(p=>p.classList.toggle("on",p.id==="p-"+b.dataset.p));
+  });
+
+  // rentabilidade acumulada
+  $("patAcRange").onchange = e => { patAcRange = +e.target.value || 0; renderPatAcum(); };
+
+  // recorrentes × eventuais
+  $("recRange").onchange = e => { recRangeMeses = +e.target.value || 12; renderRecorrentes(); };
+
+  // sugestão de categorias
+  $("catSugCalc").onclick = calcularSugestoes;
+  $("catSugAplicar").onclick = aplicarSugestoes;
+  $("tblCatSug").addEventListener("change", e=>{
+    const t = e.target;
+    if(t.id==="catSugAll"){
+      catSugLista.forEach(s=>s.marcado = t.checked);
+      $("tblCatSug").querySelectorAll("input[data-cs]").forEach(el=>el.checked = t.checked);
+    } else if(t.dataset.cs!==undefined){
+      catSugLista[+t.dataset.cs].marcado = t.checked;
+    } else if(t.dataset.cscat!==undefined){
+      catSugLista[+t.dataset.cscat].cat = t.value;
+    }
+    $("catSugAplicar").disabled = !catSugLista.some(s=>s.marcado);
+  });
+
+  // tema claro/escuro
+  aplicarTema(temaAtual());
+  $("temaBtn").onclick = alternarTema;
+
+  // busca global
+  let gsTimer = null;
+  $("gsInput").addEventListener("input", ()=>{ clearTimeout(gsTimer); gsTimer = setTimeout(renderBuscaGlobal, 140); });
+  $("gsInput").addEventListener("keydown", e=>{
+    if(e.key==="Escape"){ $("gsRes").hidden = true; $("gsInput").blur(); return; }
+    if(!gsItens.length) return;
+    if(e.key==="ArrowDown" || e.key==="ArrowUp"){
+      e.preventDefault();
+      gsSel = (gsSel + (e.key==="ArrowDown"?1:-1) + gsItens.length) % gsItens.length;
+      $("gsRes").querySelectorAll(".gsIt").forEach(el=>el.classList.toggle("sel", +el.dataset.i===gsSel));
+      const sel = $("gsRes").querySelector(".gsIt.sel"); if(sel) sel.scrollIntoView({block:"nearest"});
+    }
+    if(e.key==="Enter"){ e.preventDefault(); gsAbrir(gsSel); }
+  });
+  $("gsRes").addEventListener("click", e=>{ const it=e.target.closest(".gsIt"); if(it) gsAbrir(+it.dataset.i); });
+  document.addEventListener("click", e=>{
+    if(!e.target.closest(".gsWrap")) $("gsRes").hidden = true;
   });
 
   // home
