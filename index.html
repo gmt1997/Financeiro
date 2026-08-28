@@ -41,6 +41,7 @@ html[data-tema="escuro"] .toast{background:var(--text);color:#131211}
 .gsRes .gsEmpty{padding:14px 10px;color:var(--muted);font-size:.82rem}
 .temaBtn{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:8px;width:32px;height:31px;font-size:.9rem;line-height:1}
 .temaBtn:hover{border-color:var(--dim)}
+.card2{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
 @media(max-width:820px){ .navtools{width:100%;padding:0 0 8px} .gsWrap{flex:1} .gsWrap input,.gsWrap input:focus{width:100%} .gsRes{width:100%} }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-size:15px}
@@ -588,6 +589,71 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <p class="note mt">Composto por <code>(1+r₁)×(1+r₂)…−1</code> sobre a rentabilidade que você informa em cada fechamento. O CAGR anualiza esse acumulado pelo número de meses do período.</p>
   </div>
   <div class="card">
+    <h3>Meses de independência <span class="hint">— por quanto tempo o patrimônio cobre seu custo de vida</span></h3>
+    <div class="kpis" id="indKpis"></div>
+    <div class="chartbox short mt"><canvas id="chInd"></canvas></div>
+    <p class="note mt">Usa o <b>custo fixo mensal</b> detectado na aba Análises (despesas recorrentes). A linha tracejada marca 300 meses (25 anos), referência usual de independência financeira pela regra dos 4%.</p>
+  </div>
+
+  <div class="card">
+    <h3>Aporte × rentabilidade <span class="hint">— quanto do crescimento veio de dinheiro novo e quanto de retorno</span></h3>
+    <div class="bar">
+      <select id="decRange">
+        <option value="12">Últimos 12 meses</option>
+        <option value="24" selected>Últimos 24 meses</option>
+        <option value="0">Todo o histórico</option>
+      </select>
+      <span class="spacer"></span>
+      <span class="pill" id="decResumo"></span>
+    </div>
+    <div class="kpis mt" id="decKpis"></div>
+    <div class="chartbox tall mt"><canvas id="chDecomp"></canvas></div>
+    <p class="note mt">Aporte estimado = saldo do mês nos lançamentos (receitas − despesas). Rentabilidade = variação do patrimônio menos esse aporte. Se você movimenta dinheiro fora do app, a separação fica aproximada.</p>
+  </div>
+
+  <div class="card">
+    <h3>Rebalanceamento <span class="hint">— desvio da sua alocação-alvo</span></h3>
+    <div class="bar">
+      <span class="pill" id="rebResumo"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="rebEditar">Definir alvos</button>
+    </div>
+    <div id="rebForm" style="display:none" class="card2 mt">
+      <div class="form" id="rebInputs"></div>
+      <div class="bar mt">
+        <span class="pill" id="rebSoma"></span>
+        <span class="spacer"></span>
+        <button class="btn" id="rebCancel">Cancelar</button>
+        <button class="btn pri" id="rebSalvar">Salvar alvos</button>
+      </div>
+    </div>
+    <div class="twrap mt"><table id="tblReb"></table></div>
+    <p class="note mt">Defina o peso-alvo de cada classe (a soma deve fechar em 100%). A coluna <b>ajuste</b> mostra quanto comprar (+) ou vender (−) para voltar ao alvo. Sem alvos definidos, a tabela mostra apenas a alocação atual.</p>
+  </div>
+
+  <div class="card">
+    <h3>Patrimônio real <span class="hint">— descontada a inflação</span></h3>
+    <div class="bar">
+      <select id="realBase"></select>
+      <span class="spacer"></span>
+      <span class="pill" id="realResumo"></span>
+      <button class="btn" id="realEditar">Informar IPCA</button>
+    </div>
+    <div id="realForm" style="display:none" class="card2 mt">
+      <p class="note" style="margin-bottom:8px">Informe o IPCA acumulado de cada ano (%). Anos sem valor usam 0.</p>
+      <div class="form" id="realInputs"></div>
+      <div class="bar mt">
+        <span class="spacer"></span>
+        <button class="btn" id="realCancel">Cancelar</button>
+        <button class="btn pri" id="realSalvar">Salvar IPCA</button>
+      </div>
+    </div>
+    <div class="kpis mt" id="realKpis"></div>
+    <div class="chartbox tall mt"><canvas id="chReal"></canvas></div>
+    <p class="note mt">A curva real converte todo o histórico para o poder de compra do ano-base escolhido. Ganho nominal alto com inflação alta pode significar pouco ganho real.</p>
+  </div>
+
+  <div class="card">
     <h3>Novo fechamento mensal</h3>
     <div class="hint">Informe o valor de mercado de cada classe no fim do mês (deixe 0 onde não houver)</div>
     <div class="form" id="patForm"></div>
@@ -630,6 +696,63 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="twrap mt" style="max-height:360px;overflow-y:auto"><table id="tblBtcSafras"></table></div>
     <p class="note mt">Custo remanescente e L/P consideram somente o BTC que <b>ainda está em carteira</b>. Vendas consomem, via FIFO, as safras mais antigas. Sem cotação definida acima, o valor atual e o L/P ficam em branco.</p>
   </div>
+  <div class="card">
+    <h3>Ganho de capital e IR <span class="hint">— lucro realizado por venda (FIFO) e controle do limite de isenção</span></h3>
+    <div class="bar">
+      <select id="irAno" style="min-width:150px"></select>
+      <span class="spacer"></span>
+      <span class="pill" id="irResumo"></span>
+    </div>
+    <div class="kpis mt" id="irKpis"></div>
+    <div class="card2 mt">
+      <h4 style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Alienações por mês · limite de isenção</h4>
+      <div class="twrap" style="max-height:300px;overflow-y:auto"><table id="tblIrMes"></table></div>
+    </div>
+    <div class="card2 mt">
+      <h4 style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Vendas detalhadas · apuração FIFO</h4>
+      <div class="twrap" style="max-height:340px;overflow-y:auto"><table id="tblIrVendas"></table></div>
+    </div>
+    <div class="card2 mt">
+      <h4 style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Bens e direitos · posição em 31/12</h4>
+      <div class="twrap"><table id="tblIrBens"></table></div>
+    </div>
+    <p class="note mt">Alienações de cripto até <b id="irLimTxt">R$ 35.000</b> por mês são isentas de IR sobre o ganho (art. 3º, IN RFB 1.888/2019); acima disso o ganho é tributado a partir de 15%. O limite considera o <b>total vendido no mês</b>, não o lucro. Isto é um apoio de cálculo — confira antes de declarar.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Seu preço médio × DCA teórico <span class="hint">— o timing dos seus aportes somou ou subtraiu?</span></h3>
+      <div class="chartbox short"><canvas id="chBtcDca"></canvas></div>
+      <div class="kpis mt" id="dcaKpis"></div>
+      <p class="note mt">DCA teórico = mesmo valor total, distribuído igualmente entre todos os meses em que você comprou. Se o seu preço médio é <b>menor</b>, seus aportes acertaram melhor o timing.</p>
+    </div>
+    <div class="card">
+      <h3>Drawdown da posição <span class="hint">— queda desde o topo do valor da carteira</span></h3>
+      <div class="chartbox short"><canvas id="chBtcDd"></canvas></div>
+      <div class="kpis mt" id="ddKpis"></div>
+      <p class="note mt">Calculado sobre o valor de mercado da sua posição usando o preço de cada ordem como referência histórica. Sem série diária de preços, é uma aproximação pelos pontos onde você operou.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Simulador de cenários <span class="hint">— e se o BTC for a…</span></h3>
+    <div class="bar" style="flex-wrap:wrap;gap:10px">
+      <label class="muted" style="font-size:.8rem">Preço do BTC (R$)</label>
+      <input type="number" id="simPx" step="1000" min="0" style="max-width:180px">
+      <span class="seg" id="simQuick">
+        <button data-m="0.5">−50%</button>
+        <button data-m="0.75">−25%</button>
+        <button data-m="1" class="on">Atual</button>
+        <button data-m="1.5">+50%</button>
+        <button data-m="2">2×</button>
+        <button data-m="3">3×</button>
+      </span>
+    </div>
+    <div class="kpis mt" id="simKpis"></div>
+    <div class="chartbox short mt"><canvas id="chBtcSim"></canvas></div>
+    <p class="note mt">Mostra como sua posição, o patrimônio total e a exposição a cripto reagem a cada nível de preço. O patrimônio não-cripto é mantido constante no último fechamento informado.</p>
+  </div>
+
   <div class="grid2">
     <div class="card">
       <h3>Aportes por mês (R$)</h3>
@@ -837,6 +960,8 @@ const ymLabel = ym => {
   const [y,m]=ym.split("-"); return MESES[+m-1]+"/"+y.slice(2);
 };
 const todayISO = () => new Date().toISOString().slice(0,10);
+/** Alvo de exposição a cripto, em % (configurável). */
+const btcExpoMeta = () => +(safeStore.get("fin_btc_expo_meta") || "20");
 const uid = () => "l_"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove("show"),2600); }
 const safeStore = (()=>{ let mem={}; let ok=false; try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); ok=true; }catch(e){}
@@ -1822,7 +1947,7 @@ function renderBtcExpo(total, btcVal){
   const btcS = btcStats();
   const pct = btcVal/total;
   // meta de exposição (default 20%)
-  const metaPct = +(safeStore.get("fin_btc_expo_meta") || "20") / 100;
+  const metaPct = btcExpoMeta() / 100;
   const ratio = metaPct>0 ? pct/metaPct : 0;
   // faixas de risco relativas à meta
   let sev, msg, cor;
@@ -1941,6 +2066,10 @@ function renderPat(){
         return `<td class="num">${val}</td>`;
       }).join("")}<td class="num"><b>${fmtBRL0(tot)}</b></td><td class="num ${r.rentabilidade>=0?'pos':'neg'}">${r.rentabilidade==null?"—":fmtPct(r.rentabilidade)}</td><td><button class="del" data-delpat="${r.id}">✕</button></td></tr>`;}).join("")+"</tbody>";
   renderPatAcum();
+  renderIndependencia();
+  renderDecomposicao();
+  renderRebalance();
+  renderPatReal();
 }
 async function onAddPat(){
   const mes = $("pMes").value; if(!mes) return toast("Informe o mês.");
@@ -2012,6 +2141,10 @@ function renderBtc(){
     options:{maintainAspectRatio:false,scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{ticks:{callback:moneyTick}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ttMoney}}}}});
 
   renderBtcSafras(px);
+  renderBtcIR();
+  renderBtcDca();
+  renderBtcDrawdown();
+  renderBtcSim();
 
   const rows = [...DB.btc].reverse();
   $("tblBtc").innerHTML = `<thead><tr><th>Data</th><th>Op.</th><th>Corretora</th><th class="num">Qtde ₿</th><th class="num">Preço</th><th class="num">Total</th><th></th></tr></thead><tbody>`+
@@ -3180,6 +3313,537 @@ function renderPatAcum(){
       }}}}});
 }
 
+/* ================= GANHO DE CAPITAL / IR (FIFO) ================= */
+const IR_LIMITE_ISENCAO = 35000;   // alienações mensais isentas (IN RFB 1.888/2019)
+const IR_ALIQUOTA = 0.15;          // primeira faixa de ganho de capital
+/**
+ * Apura cada venda pelo método FIFO, devolvendo custo de aquisição consumido,
+ * ganho e a composição dos lotes usados. Também devolve a posição em 31/12 de
+ * cada ano (para o anexo de bens e direitos).
+ */
+function btcApuracao(){
+  const lotes = [];   // fila FIFO {data, qty, custo}
+  const vendas = [];
+  const ops = (DB.btc||[])
+    .filter(b => b && typeof b.data==="string" && /^\d{4}-\d{2}-\d{2}/.test(b.data))
+    .sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
+  // snapshots de fim de ano
+  const anos = [...new Set(ops.map(o=>o.data.slice(0,4)))].sort();
+  const bens = [];
+  let iAno = 0;
+  const snapshot = ano => {
+    let q=0,c=0; for(const l of lotes){ q+=l.qty; c+=l.custo; }
+    bens.push({ano, qty:q, custo:c});
+  };
+
+  for(const b of ops){
+    const anoOp = b.data.slice(0,4);
+    // fecha snapshots de anos anteriores a esta operação
+    while(iAno < anos.length && anos[iAno] < anoOp){ snapshot(anos[iAno]); iAno++; }
+    if(b.operacao==="compra"){
+      const q = +b.quantidade||0, c = +b.total||0;
+      if(q>1e-12) lotes.push({data:b.data, qty:q, custo:c});
+    } else {
+      let restante = +b.quantidade||0;
+      const total = +b.total||0;
+      const qVenda = restante;
+      let custoConsumido = 0;
+      const usados = [];
+      while(restante>1e-12 && lotes.length){
+        const l = lotes[0];
+        const consumir = Math.min(l.qty, restante);
+        const custoParte = l.qty>0 ? l.custo * (consumir/l.qty) : 0;
+        custoConsumido += custoParte;
+        usados.push({data:l.data, qty:consumir, custo:custoParte});
+        l.qty -= consumir; l.custo -= custoParte; restante -= consumir;
+        if(l.qty<=1e-12) lotes.shift();
+      }
+      const ganho = total - custoConsumido;
+      vendas.push({data:b.data, ym:b.data.slice(0,7), ano:anoOp, qty:qVenda,
+        total, custo:custoConsumido, ganho, precoVenda: qVenda>0? total/qVenda : null,
+        precoMedioCusto: qVenda>0? custoConsumido/qVenda : null, lotes:usados,
+        corretora:b.corretora||null});
+    }
+  }
+  while(iAno < anos.length){ snapshot(anos[iAno]); iAno++; }
+  // posição atual (para o ano corrente ainda aberto)
+  let qAtual=0, cAtual=0; for(const l of lotes){ qAtual+=l.qty; cAtual+=l.custo; }
+
+  // agregação mensal para o limite de isenção
+  const porMes = new Map();
+  for(const v of vendas){
+    if(!porMes.has(v.ym)) porMes.set(v.ym, {ym:v.ym, ano:v.ano, alienado:0, ganho:0, n:0});
+    const m = porMes.get(v.ym);
+    m.alienado += v.total; m.ganho += v.ganho; m.n++;
+  }
+  for(const m of porMes.values()){
+    m.isento = m.alienado <= IR_LIMITE_ISENCAO;
+    m.imposto = (!m.isento && m.ganho>0) ? m.ganho*IR_ALIQUOTA : 0;
+  }
+  return {vendas, meses:[...porMes.values()].sort((a,b)=>a.ym<b.ym?-1:1), bens,
+          posicaoAtual:{qty:qAtual, custo:cAtual}};
+}
+let irAnoSel = "todos";
+function renderBtcIR(){
+  if(!$("tblIrMes")) return;
+  const ap = btcApuracao();
+  $("irLimTxt").textContent = fmtBRL0(IR_LIMITE_ISENCAO);
+
+  // seletor de ano
+  const anos = [...new Set(ap.vendas.map(v=>v.ano))].sort().reverse();
+  const sel = $("irAno");
+  if(sel.dataset.built !== anos.join(",")){
+    sel.innerHTML = `<option value="todos">Todos os anos</option>` + anos.map(a=>`<option value="${a}">${a}</option>`).join("");
+    sel.dataset.built = anos.join(",");
+    sel.value = irAnoSel;
+  }
+  const filtro = v => irAnoSel==="todos" || v.ano===irAnoSel;
+  const vendas = ap.vendas.filter(filtro);
+  const meses = ap.meses.filter(filtro);
+
+  const totAlienado = meses.reduce((s,m)=>s+m.alienado,0);
+  const totGanho = vendas.reduce((s,v)=>s+v.ganho,0);
+  const totImposto = meses.reduce((s,m)=>s+m.imposto,0);
+  const mesesTributaveis = meses.filter(m=>!m.isento).length;
+
+  $("irResumo").textContent = vendas.length
+    ? `${vendas.length} venda(s) · ${mesesTributaveis} mês(es) acima do limite`
+    : "nenhuma venda registrada";
+  $("irResumo").className = "pill" + (vendas.length ? (mesesTributaveis? " err":" ok") : "");
+
+  $("irKpis").innerHTML = `
+    <div class="kpi"><div class="l">Total alienado</div><div class="v">${fmtBRL0(totAlienado)}</div><div class="s">${irAnoSel==="todos"?"todo o histórico":"em "+irAnoSel}</div></div>
+    <div class="kpi"><div class="l">Ganho de capital</div><div class="v ${totGanho>=0?'pos':'neg'}">${fmtBRL0(totGanho)}</div><div class="s">apurado por FIFO</div></div>
+    <div class="kpi"><div class="l">Imposto estimado</div><div class="v ${totImposto>0?'neg':''}">${fmtBRL0(totImposto)}</div><div class="s">${totImposto>0?`15% sobre ganho de ${mesesTributaveis} mês(es)`:"tudo dentro da isenção"}</div></div>
+    <div class="kpi"><div class="l">Posição atual</div><div class="v btc">${fmtBtc(ap.posicaoAtual.qty)}</div><div class="s">custo ${fmtBRL0(ap.posicaoAtual.custo)}</div></div>`;
+
+  // tabela mensal (limite de isenção)
+  if(!meses.length){
+    $("tblIrMes").innerHTML = `<tbody><tr><td class="muted" style="padding:14px">Nenhuma venda no período — nada a apurar.</td></tr></tbody>`;
+  } else {
+    $("tblIrMes").innerHTML =
+      `<thead><tr><th>Mês</th><th class="num">Alienado</th><th class="num">% do limite</th><th class="num">Ganho</th><th>Situação</th><th class="num">Imposto (15%)</th></tr></thead><tbody>`+
+      meses.map(m=>{
+        const pct = m.alienado/IR_LIMITE_ISENCAO;
+        const barra = Math.min(100, pct*100);
+        const cor = m.isento ? "var(--pos)" : "var(--neg)";
+        return `<tr>
+          <td>${ymLabel(m.ym)}</td>
+          <td class="num">${fmtBRL0(m.alienado)}</td>
+          <td class="num"><div style="display:flex;align-items:center;gap:7px;justify-content:flex-end">
+            <span style="flex:0 0 60px;height:5px;background:var(--line);border-radius:3px;overflow:hidden;display:inline-block">
+              <span style="display:block;height:100%;width:${barra}%;background:${cor}"></span></span>
+            <span>${fmtPct(pct)}</span></div></td>
+          <td class="num ${m.ganho>=0?'pos':'neg'}">${fmtBRL0(m.ganho)}</td>
+          <td>${m.isento? '<span class="tag rec">isento</span>' : '<span class="tag des">tributável</span>'}</td>
+          <td class="num ${m.imposto>0?'neg':'muted'}">${m.imposto>0?fmtBRL0(m.imposto):"—"}</td>
+        </tr>`;
+      }).join("")+
+      `</tbody><tfoot><tr><td><b>Total</b></td><td class="num"><b>${fmtBRL0(totAlienado)}</b></td><td></td><td class="num ${totGanho>=0?'pos':'neg'}"><b>${fmtBRL0(totGanho)}</b></td><td></td><td class="num ${totImposto>0?'neg':''}"><b>${fmtBRL0(totImposto)}</b></td></tr></tfoot>`;
+  }
+
+  // vendas detalhadas
+  if(!vendas.length){
+    $("tblIrVendas").innerHTML = `<tbody><tr><td class="muted" style="padding:14px">Sem vendas registradas.</td></tr></tbody>`;
+  } else {
+    $("tblIrVendas").innerHTML =
+      `<thead><tr><th>Data</th><th class="num">Qtde ₿</th><th class="num">Preço venda</th><th class="num">Custo médio (FIFO)</th><th class="num">Valor da venda</th><th class="num">Custo</th><th class="num">Ganho</th><th>Lotes consumidos</th></tr></thead><tbody>`+
+      vendas.map(v=>`<tr>
+        <td>${v.data.split("-").reverse().join("/")}</td>
+        <td class="num btcc">${fmtBtc(v.qty)}</td>
+        <td class="num">${v.precoVenda!=null?fmtBRL0(v.precoVenda):"—"}</td>
+        <td class="num">${v.precoMedioCusto!=null?fmtBRL0(v.precoMedioCusto):"—"}</td>
+        <td class="num">${fmtBRL0(v.total)}</td>
+        <td class="num">${fmtBRL0(v.custo)}</td>
+        <td class="num ${v.ganho>=0?'pos':'neg'}">${fmtBRL0(v.ganho)}</td>
+        <td class="muted" style="font-size:.72rem">${v.lotes.map(l=>`${l.data.slice(0,7)}: ${fmtBtc(l.qty)}`).join(" · ")||"—"}</td>
+      </tr>`).join("")+`</tbody>`;
+  }
+
+  // bens e direitos
+  const bens = ap.bens.filter(b => irAnoSel==="todos" || b.ano===irAnoSel);
+  if(!bens.length){
+    $("tblIrBens").innerHTML = `<tbody><tr><td class="muted" style="padding:14px">Sem posição a declarar no período.</td></tr></tbody>`;
+  } else {
+    $("tblIrBens").innerHTML =
+      `<thead><tr><th>Ano-base</th><th class="num">Qtde em 31/12</th><th class="num">Custo de aquisição</th><th>Discriminação sugerida</th></tr></thead><tbody>`+
+      bens.map(b=>`<tr>
+        <td>${b.ano}</td>
+        <td class="num btcc">${fmtBtc(b.qty)}</td>
+        <td class="num">${fmtBRL0(b.custo)}</td>
+        <td class="muted" style="font-size:.75rem">${b.qty>1e-9? `${fmtBtc(b.qty)} BTC adquiridos por ${fmtBRL(b.custo)}, custo médio ${fmtBRL0(b.qty>0?b.custo/b.qty:0)}/BTC` : "posição zerada"}</td>
+      </tr>`).join("")+`</tbody>`;
+  }
+}
+
+/* ================= DCA TEÓRICO ================= */
+function renderBtcDca(){
+  if(!$("chBtcDca")) return;
+  const compras = (DB.btc||[]).filter(b=>b && b.operacao==="compra" && b.data && +b.quantidade>0 && +b.total>0)
+    .sort((a,b)=>a.data<b.data?-1:1);
+  if(compras.length<2){
+    $("dcaKpis").innerHTML = `<div class="kpi"><div class="l">DCA</div><div class="v muted">—</div><div class="s">registre ao menos 2 compras</div></div>`;
+    mkChart("chBtcDca",{type:"line",data:{labels:[],datasets:[]},options:{maintainAspectRatio:false}});
+    return;
+  }
+  // agrupa por mês
+  const porMes = new Map();
+  for(const c of compras){
+    const ym = c.data.slice(0,7);
+    if(!porMes.has(ym)) porMes.set(ym,{ym, total:0, qty:0, somaPreco:0, n:0});
+    const m = porMes.get(ym);
+    m.total += +c.total; m.qty += +c.quantidade; m.somaPreco += (+c.preco || (+c.total/+c.quantidade)); m.n++;
+  }
+  const meses = [...porMes.values()].sort((a,b)=>a.ym<b.ym?-1:1);
+  const totalInvestido = meses.reduce((s,m)=>s+m.total,0);
+  const aporteDCA = totalInvestido / meses.length;   // mesmo valor todo mês
+  // curvas de preço médio acumulado: real vs DCA
+  let accQtyReal=0, accCustoReal=0, accQtyDca=0, accCustoDca=0;
+  const curvaReal=[], curvaDca=[];
+  for(const m of meses){
+    const precoMes = m.qty>0 ? m.total/m.qty : (m.somaPreco/m.n);
+    accQtyReal += m.qty; accCustoReal += m.total;
+    accQtyDca += aporteDCA/precoMes; accCustoDca += aporteDCA;
+    curvaReal.push(accQtyReal>0? accCustoReal/accQtyReal : null);
+    curvaDca.push(accQtyDca>0? accCustoDca/accQtyDca : null);
+  }
+  const pmReal = accQtyReal>0? accCustoReal/accQtyReal : 0;
+  const pmDca  = accQtyDca>0? accCustoDca/accQtyDca : 0;
+  const dif = pmDca>0 ? (pmDca - pmReal)/pmDca : 0;   // positivo = você pagou menos que o DCA
+  const qtyExtra = accQtyReal - accQtyDca;
+
+  mkChart("chBtcDca",{type:"line",
+    data:{labels:meses.map(m=>ymLabel(m.ym)),datasets:[
+      {label:"Seu preço médio",data:curvaReal,borderColor:"#B26A12",backgroundColor:"rgba(178,106,18,.10)",fill:true,tension:.25,pointRadius:0,borderWidth:2},
+      {label:"DCA teórico",data:curvaDca,borderColor:"#6F6A61",borderDash:[5,4],tension:.25,pointRadius:0,borderWidth:1.5,fill:false},
+    ]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{ticks:{callback:moneyTick}}},
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtBRL0(c.parsed.y||0)}`}}}}});
+
+  $("dcaKpis").innerHTML = `
+    <div class="kpi"><div class="l">Seu preço médio</div><div class="v btc">${fmtBRL0(pmReal)}</div><div class="s">${fmtBtc(accQtyReal)} acumulados</div></div>
+    <div class="kpi"><div class="l">DCA teórico</div><div class="v">${fmtBRL0(pmDca)}</div><div class="s">${fmtBRL0(aporteDCA)}/mês em ${meses.length} meses</div></div>
+    <div class="kpi"><div class="l">Diferença</div><div class="v ${dif>=0?'pos':'neg'}">${dif>=0?"−":"+"}${fmtPct(Math.abs(dif))}</div><div class="s">${dif>=0?"você pagou menos que o DCA":"o DCA teria saído melhor"}</div></div>
+    <div class="kpi"><div class="l">₿ a mais/menos</div><div class="v ${qtyExtra>=0?'pos':'neg'}">${qtyExtra>=0?"+":""}${fmtBtc(qtyExtra)}</div><div class="s">vs. o mesmo dinheiro no DCA</div></div>`;
+}
+
+/* ================= DRAWDOWN DA POSIÇÃO ================= */
+function renderBtcDrawdown(){
+  if(!$("chBtcDd")) return;
+  const s = btcStats();
+  const px = getBtcPx();
+  // série do valor da posição nos pontos em que houve ordem + ponto atual
+  const pts = s.points.filter(p=>p.price>0);
+  if(pts.length<2){
+    $("ddKpis").innerHTML = `<div class="kpi"><div class="l">Drawdown</div><div class="v muted">—</div><div class="s">registre ao menos 2 ordens</div></div>`;
+    mkChart("chBtcDd",{type:"line",data:{labels:[],datasets:[]},options:{maintainAspectRatio:false}});
+    return;
+  }
+  const serie = pts.map(p=>({data:p.data, valor:p.cumQty*p.price}));
+  if(px && s.qty>0) serie.push({data:todayISO(), valor:s.qty*px});
+  let pico=-Infinity, ddMax=0, dataPico=null, dataFundo=null, picoAtual=null;
+  const dd = serie.map(p=>{
+    if(p.valor>pico){ pico=p.valor; picoAtual=p.data; }
+    const d = pico>0 ? (p.valor-pico)/pico : 0;
+    if(d<ddMax){ ddMax=d; dataPico=picoAtual; dataFundo=p.data; }
+    return d*100;
+  });
+  const ddHoje = dd[dd.length-1];
+  const valorAtual = serie[serie.length-1].valor;
+  const picoHist = Math.max(...serie.map(p=>p.valor));
+
+  mkChart("chBtcDd",{type:"line",
+    data:{labels:serie.map(p=>ymLabel(p.data.slice(0,7))),datasets:[
+      {label:"Drawdown",data:dd,borderColor:"#C0394B",backgroundColor:"rgba(192,57,75,.14)",fill:true,tension:.2,pointRadius:0,borderWidth:1.6},
+    ]},
+    options:{maintainAspectRatio:false,
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:10}},y:{max:0,ticks:{callback:v=>v.toFixed(0)+"%"}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.y.toFixed(1)}% do topo`}}}}});
+
+  $("ddKpis").innerHTML = `
+    <div class="kpi"><div class="l">Drawdown atual</div><div class="v ${ddHoje<-1?'neg':'pos'}">${ddHoje.toFixed(1)}%</div><div class="s">${ddHoje<-1?"abaixo do topo":"em máxima ou perto"}</div></div>
+    <div class="kpi"><div class="l">Máx. drawdown</div><div class="v neg">${ddMax===0?"0%":(ddMax*100).toFixed(1)+"%"}</div><div class="s">${dataPico?`${ymLabel(dataPico.slice(0,7))} → ${ymLabel(dataFundo.slice(0,7))}`:"—"}</div></div>
+    <div class="kpi"><div class="l">Pico da posição</div><div class="v">${fmtBRL0(picoHist)}</div><div class="s">maior valor já atingido</div></div>
+    <div class="kpi"><div class="l">Valor atual</div><div class="v btc">${fmtBRL0(valorAtual)}</div><div class="s">${px?"com a cotação definida":"último preço de ordem"}</div></div>`;
+}
+
+/* ================= SIMULADOR DE CENÁRIOS ================= */
+let simPreco = null;
+function renderBtcSim(){
+  if(!$("chBtcSim")) return;
+  const s = btcStats();
+  // usa o custo apurado por FIFO (mesmo critério do IR e das safras) para não
+  // exibir dois custos diferentes para a mesma posição em telas distintas
+  const custoFifo = btcApuracao().posicaoAtual.custo;
+  const pxAtual = getBtcPx();
+  if(simPreco==null) simPreco = pxAtual || 0;
+  if($("simPx") && document.activeElement !== $("simPx")) $("simPx").value = Math.round(simPreco)||"";
+
+  const pat = DB.pat||[];
+  const last = pat.length? pat[pat.length-1] : null;
+  const totalAtual = last ? (last.patrimonio || PAT_CLASSES.reduce((a,[k])=>a+(last[k]||0),0)) : 0;
+  const btcValAtual = pxAtual ? s.qty*pxAtual : (last? last.cripto||0 : 0);
+  const naoCripto = Math.max(0, totalAtual - btcValAtual);
+
+  const valorSim = s.qty * simPreco;
+  const patSim = naoCripto + valorSim;
+  const expoSim = patSim>0 ? valorSim/patSim : 0;
+  const lp = valorSim - custoFifo;
+  const lpPct = custoFifo>0 ? lp/custoFifo : null;
+  const varPx = pxAtual ? (simPreco-pxAtual)/pxAtual : null;
+
+  $("simKpis").innerHTML = `
+    <div class="kpi"><div class="l">Valor da posição</div><div class="v btc">${fmtBRL0(valorSim)}</div><div class="s">${fmtBtc(s.qty)} × ${fmtBRL0(simPreco)}${varPx!=null?` · ${varPx>=0?"+":""}${fmtPct(varPx)} vs hoje`:""}</div></div>
+    <div class="kpi"><div class="l">L/P da posição</div><div class="v ${lp>=0?'pos':'neg'}">${fmtBRL0(lp)}</div><div class="s">${lpPct!=null?fmtPct(lpPct):"—"} sobre custo FIFO de ${fmtBRL0(custoFifo)}</div></div>
+    <div class="kpi"><div class="l">Patrimônio total</div><div class="v blue">${fmtBRL0(patSim)}</div><div class="s">${totalAtual>0?`${patSim>=totalAtual?"+":""}${fmtBRL0(patSim-totalAtual)} vs hoje`:"sem fechamento registrado"}</div></div>
+    <div class="kpi"><div class="l">Exposição a cripto</div><div class="v ${expoSim>0.35?'neg':expoSim>0.25?'':'pos'}">${fmtPct(expoSim)}</div><div class="s">alvo ${btcExpoMeta()}%</div></div>`;
+
+  // curva de sensibilidade
+  const base = pxAtual || simPreco || 1;
+  const mults = [0.25,0.5,0.75,1,1.5,2,3,5];
+  const labels = mults.map(m=>`${m}×`);
+  const vals = mults.map(m=>s.qty*base*m);
+  const expos = mults.map(m=>{ const v=s.qty*base*m; const p=naoCripto+v; return p>0? v/p*100 : 0; });
+  mkChart("chBtcSim",{
+    data:{labels,datasets:[
+      {type:"bar",label:"Valor da posição",data:vals,backgroundColor:"rgba(178,106,18,.62)",borderRadius:2,yAxisID:"y"},
+      {type:"line",label:"Exposição cripto (%)",data:expos,borderColor:"#3D5A80",backgroundColor:"#3D5A80",tension:.3,pointRadius:3,borderWidth:2,yAxisID:"y1"},
+    ]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false},title:{display:true,text:"múltiplo do preço atual"}},
+        y:{position:"left",ticks:{callback:moneyTick}},
+        y1:{position:"right",grid:{drawOnChartArea:false},ticks:{callback:v=>v.toFixed(0)+"%"},title:{display:true,text:"% do patrimônio"}}},
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{
+        label:c=>c.dataset.yAxisID==="y1" ? ` Exposição: ${c.parsed.y.toFixed(1)}%` : ` Valor: ${fmtBRL0(c.parsed.y)}`,
+        afterBody:items=>{ const m=mults[items[0].dataIndex]; return `Preço: ${fmtBRL0(base*m)}`; }}}}}});
+}
+
+/* ================= MESES DE INDEPENDÊNCIA ================= */
+/** Custo fixo mensal médio, reaproveitando a detecção de recorrentes. */
+function custoFixoMensal(nMeses=12){
+  try{
+    const {meses, porMes} = analiseRecorrencia(nMeses);
+    const soma = meses.reduce((s,m)=>s+(porMes.get(m)?.fixo||0),0);
+    return meses.length ? soma/meses.length : 0;
+  }catch(e){ return 0; }
+}
+function renderIndependencia(){
+  if(!$("chInd")) return;
+  const pat = (DB.pat||[]).filter(p=>p && p.mes).sort((a,b)=>a.mes<b.mes?-1:1);
+  const custo = custoFixoMensal(12);
+  if(!pat.length || custo<=0){
+    $("indKpis").innerHTML = `<div class="kpi"><div class="l">Meses de independência</div><div class="v muted">—</div><div class="s">${custo<=0?"sem custo fixo detectado ainda":"sem fechamento de patrimônio"}</div></div>`;
+    mkChart("chInd",{type:"line",data:{labels:[],datasets:[]},options:{maintainAspectRatio:false}});
+    return;
+  }
+  const serie = pat.map(p=>{
+    const tot = p.patrimonio || PAT_CLASSES.reduce((s,[k])=>s+(p[k]||0),0);
+    return {mes:p.mes, meses: tot/custo, total:tot};
+  });
+  const atual = serie[serie.length-1];
+  const anoAtras = serie.length>12 ? serie[serie.length-13] : serie[0];
+  const delta = atual.meses - anoAtras.meses;
+  const anos = atual.meses/12;
+  // regra dos 4%: patrimônio necessário = custo anual / 0.04 = custo mensal * 300
+  const alvo = custo*300;
+  const progresso = atual.total/alvo;
+
+  $("indKpis").innerHTML = `
+    <div class="kpi"><div class="l">Meses de independência</div><div class="v blue">${atual.meses.toFixed(1)}</div><div class="s">${anos.toFixed(1)} ano(s) de custo fixo coberto</div></div>
+    <div class="kpi"><div class="l">Custo fixo mensal</div><div class="v neg">${fmtBRL0(custo)}</div><div class="s">média dos últimos 12 meses</div></div>
+    <div class="kpi"><div class="l">Evolução em 12m</div><div class="v ${delta>=0?'pos':'neg'}">${delta>=0?"+":""}${delta.toFixed(1)} meses</div><div class="s">${anoAtras.meses.toFixed(1)} → ${atual.meses.toFixed(1)}</div></div>
+    <div class="kpi"><div class="l">Independência (4%)</div><div class="v ${progresso>=1?'pos':''}">${fmtPct(progresso)}</div><div class="s">alvo ${fmtBRL0(alvo)}</div></div>`;
+
+  mkChart("chInd",{
+    data:{labels:serie.map(s=>ymLabel(s.mes)),datasets:[
+      {type:"line",label:"Meses cobertos",data:serie.map(s=>s.meses),borderColor:"#3D5A80",backgroundColor:"rgba(61,90,128,.13)",fill:true,tension:.25,pointRadius:0,borderWidth:2},
+      {type:"line",label:"Independência (300 meses)",data:serie.map(()=>300),borderColor:"#9B958A",borderDash:[6,4],pointRadius:0,borderWidth:1,fill:false},
+    ]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{beginAtZero:true,title:{display:true,text:"meses"}}},
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{
+        label:c=>` ${c.dataset.label}: ${c.parsed.y.toFixed(1)} meses`,
+        afterBody:items=>{ const s=serie[items[0].dataIndex]; return `Patrimônio: ${fmtBRL0(s.total)}`; }}}}}});
+}
+
+/* ================= APORTE × RENTABILIDADE ================= */
+let decRange = 24;
+function renderDecomposicao(){
+  if(!$("chDecomp")) return;
+  let pat = (DB.pat||[]).filter(p=>p && p.mes).sort((a,b)=>a.mes<b.mes?-1:1);
+  if(pat.length<2){
+    $("decResumo").textContent = "precisa de ao menos 2 fechamentos";
+    $("decResumo").className = "pill";
+    $("decKpis").innerHTML = "";
+    mkChart("chDecomp",{type:"bar",data:{labels:[],datasets:[]},options:{maintainAspectRatio:false}});
+    return;
+  }
+  if(decRange>0) pat = pat.slice(-(decRange+1));
+  // saldo mensal dos lançamentos = aporte estimado
+  const saldoMes = new Map();
+  for(const t of allTx()){
+    const ym = t.data.slice(0,7);
+    saldoMes.set(ym, (saldoMes.get(ym)||0) + (t.tipo==="RECEITA"? t.valor : -t.valor));
+  }
+  const linhas = [];
+  for(let i=1;i<pat.length;i++){
+    const ant = pat[i-1], cur = pat[i];
+    const tAnt = ant.patrimonio || PAT_CLASSES.reduce((s,[k])=>s+(ant[k]||0),0);
+    const tCur = cur.patrimonio || PAT_CLASSES.reduce((s,[k])=>s+(cur[k]||0),0);
+    const variacao = tCur - tAnt;
+    const aporte = saldoMes.get(cur.mes) ?? 0;
+    const rendimento = variacao - aporte;
+    linhas.push({mes:cur.mes, variacao, aporte, rendimento, total:tCur});
+  }
+  const somaAporte = linhas.reduce((s,l)=>s+l.aporte,0);
+  const somaRend = linhas.reduce((s,l)=>s+l.rendimento,0);
+  const somaVar = somaAporte + somaRend;
+  const pctRend = somaVar!==0 ? somaRend/somaVar : 0;
+  const mesesRendMaior = linhas.filter(l=>l.rendimento>l.aporte).length;
+
+  $("decResumo").textContent = `${linhas.length} meses · ${ymLabel(linhas[0].mes)} → ${ymLabel(linhas[linhas.length-1].mes)}`;
+  $("decResumo").className = "pill";
+  $("decKpis").innerHTML = `
+    <div class="kpi"><div class="l">Crescimento total</div><div class="v ${somaVar>=0?'pos':'neg'}">${fmtBRL0(somaVar)}</div><div class="s">no período</div></div>
+    <div class="kpi"><div class="l">Veio de aporte</div><div class="v">${fmtBRL0(somaAporte)}</div><div class="s">${somaVar!==0?fmtPct(1-pctRend):"—"} do crescimento</div></div>
+    <div class="kpi"><div class="l">Veio de rendimento</div><div class="v ${somaRend>=0?'pos':'neg'}">${fmtBRL0(somaRend)}</div><div class="s">${somaVar!==0?fmtPct(pctRend):"—"} do crescimento</div></div>
+    <div class="kpi"><div class="l">Meses em que rendeu mais</div><div class="v">${mesesRendMaior}/${linhas.length}</div><div class="s">rendimento &gt; aporte no mês</div></div>`;
+
+  mkChart("chDecomp",{type:"bar",
+    data:{labels:linhas.map(l=>ymLabel(l.mes)),datasets:[
+      {label:"Aporte",data:linhas.map(l=>l.aporte),backgroundColor:"rgba(61,90,128,.72)",stack:"g",borderRadius:2},
+      {label:"Rendimento",data:linhas.map(l=>l.rendimento),
+        backgroundColor:linhas.map(l=>l.rendimento>=0?"rgba(23,126,81,.70)":"rgba(192,57,75,.62)"),stack:"g",borderRadius:2},
+    ]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:16}},y:{stacked:true,ticks:{callback:moneyTick}}},
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{
+        label:ttMoney,
+        afterBody:items=>{ const l=linhas[items[0].dataIndex];
+          return [`Variação total: ${fmtBRL(l.variacao)}`, `Patrimônio: ${fmtBRL0(l.total)}`]; }}}}}});
+}
+
+/* ================= REBALANCEAMENTO ================= */
+function rebAlvos(){
+  try{ return JSON.parse(safeStore.get("fin_reb_alvos") || "{}"); }catch(e){ return {}; }
+}
+function renderRebalance(){
+  if(!$("tblReb")) return;
+  const pat = (DB.pat||[]).filter(p=>p && p.mes).sort((a,b)=>a.mes<b.mes?-1:1);
+  if(!pat.length){ $("tblReb").innerHTML = `<tbody><tr><td class="muted" style="padding:14px">Sem fechamento de patrimônio.</td></tr></tbody>`; return; }
+  const last = pat[pat.length-1];
+  const total = last.patrimonio || PAT_CLASSES.reduce((s,[k])=>s+(last[k]||0),0);
+  const alvos = rebAlvos();
+  const temAlvo = Object.values(alvos).some(v=>+v>0);
+  const somaAlvo = PAT_CLASSES.reduce((s,[k])=>s+(+alvos[k]||0),0);
+
+  $("rebResumo").textContent = temAlvo
+    ? (Math.abs(somaAlvo-100)<0.5 ? `alvos definidos · ${ymLabel(last.mes)}` : `⚠ alvos somam ${somaAlvo.toFixed(1)}% (deveria ser 100%)`)
+    : "nenhum alvo definido";
+  $("rebResumo").className = "pill" + (temAlvo ? (Math.abs(somaAlvo-100)<0.5?" ok":" err") : "");
+
+  const linhas = PAT_CLASSES.map(([k,nome,cor])=>{
+    const val = last[k]||0;
+    const atual = total>0 ? val/total : 0;
+    const alvo = (+alvos[k]||0)/100;
+    const desvio = temAlvo ? atual-alvo : null;
+    const ajuste = temAlvo ? (alvo*total - val) : null;
+    return {k,nome,cor,val,atual,alvo,desvio,ajuste};
+  }).sort((a,b)=> b.val-a.val);
+
+  $("tblReb").innerHTML =
+    `<thead><tr><th>Classe</th><th class="num">Valor</th><th class="num">Atual</th>${temAlvo?`<th class="num">Alvo</th><th class="num">Desvio</th><th class="num">Ajuste</th>`:""}</tr></thead><tbody>`+
+    linhas.map(l=>{
+      const dv = l.desvio;
+      const cls = dv==null? "" : Math.abs(dv)<0.02 ? "muted" : dv>0 ? "neg" : "pos";
+      return `<tr>
+        <td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${l.cor};margin-right:7px"></span>${l.nome}</td>
+        <td class="num">${fmtBRL0(l.val)}</td>
+        <td class="num">${fmtPct(l.atual)}</td>
+        ${temAlvo? `<td class="num muted">${fmtPct(l.alvo)}</td>
+          <td class="num ${cls}">${dv==null?"—":(dv>=0?"+":"")+(dv*100).toFixed(1)+" p.p."}</td>
+          <td class="num ${l.ajuste>=0?'pos':'neg'}">${l.ajuste==null?"—":(l.ajuste>=0?"+":"")+fmtBRL0(l.ajuste)}</td>` : ""}
+      </tr>`;
+    }).join("")+
+    `</tbody><tfoot><tr><td><b>Total</b></td><td class="num"><b>${fmtBRL0(total)}</b></td><td class="num"><b>100%</b></td>${temAlvo?`<td class="num"><b>${somaAlvo.toFixed(0)}%</b></td><td></td><td></td>`:""}</tr></tfoot>`;
+}
+function abrirRebForm(){
+  const alvos = rebAlvos();
+  $("rebInputs").innerHTML = PAT_CLASSES.map(([k,nome])=>
+    `<div class="f"><label>${nome}</label><input type="number" step="0.5" min="0" max="100" data-reb="${k}" value="${alvos[k]??""}" placeholder="0"></div>`).join("");
+  $("rebForm").style.display = "";
+  atualizarSomaReb();
+}
+function atualizarSomaReb(){
+  const soma = [...document.querySelectorAll("[data-reb]")].reduce((s,el)=>s+(+el.value||0),0);
+  const ok = Math.abs(soma-100)<0.5;
+  $("rebSoma").textContent = `soma: ${soma.toFixed(1)}%${ok?" ✓":" (precisa fechar 100%)"}`;
+  $("rebSoma").className = "pill " + (ok?"ok":"err");
+}
+
+/* ================= PATRIMÔNIO REAL (IPCA) ================= */
+function ipcaMap(){
+  try{ return JSON.parse(safeStore.get("fin_ipca") || "{}"); }catch(e){ return {}; }
+}
+function renderPatReal(){
+  if(!$("chReal")) return;
+  const pat = (DB.pat||[]).filter(p=>p && p.mes).sort((a,b)=>a.mes<b.mes?-1:1);
+  if(!pat.length){ $("realKpis").innerHTML=""; return; }
+  const ipca = ipcaMap();
+  const anos = [...new Set(pat.map(p=>p.mes.slice(0,4)))].sort();
+  // seletor de ano-base
+  const sel = $("realBase");
+  if(sel.dataset.built !== anos.join(",")){
+    sel.innerHTML = anos.map(a=>`<option value="${a}">Poder de compra de ${a}</option>`).join("");
+    sel.dataset.built = anos.join(",");
+    sel.value = anos[anos.length-1];
+  }
+  const base = sel.value || anos[anos.length-1];
+  const temIpca = Object.values(ipca).some(v=>+v>0);
+  // fator acumulado de cada ano até o ano-base
+  const fatorAno = {};
+  for(const a of anos){
+    let f = 1;
+    if(+a < +base){ for(let y=+a; y<+base; y++) f *= (1 + (+ipca[y]||0)/100); }
+    else if(+a > +base){ for(let y=+base; y<+a; y++) f /= (1 + (+ipca[y]||0)/100); }
+    fatorAno[a] = f;
+  }
+  const serie = pat.map(p=>{
+    const tot = p.patrimonio || PAT_CLASSES.reduce((s,[k])=>s+(p[k]||0),0);
+    return {mes:p.mes, nominal:tot, real: tot * (fatorAno[p.mes.slice(0,4)]||1)};
+  });
+  const ini = serie[0], fim = serie[serie.length-1];
+  const gNom = ini.nominal>0 ? (fim.nominal-ini.nominal)/ini.nominal : null;
+  const gReal = ini.real>0 ? (fim.real-ini.real)/ini.real : null;
+  const perda = (gNom!=null&&gReal!=null) ? gNom-gReal : null;
+
+  $("realResumo").textContent = temIpca ? `IPCA informado para ${Object.keys(ipca).filter(k=>+ipca[k]>0).length} ano(s)` : "informe o IPCA para ver a curva real";
+  $("realResumo").className = "pill" + (temIpca?" ok":"");
+  $("realKpis").innerHTML = `
+    <div class="kpi"><div class="l">Patrimônio nominal</div><div class="v">${fmtBRL0(fim.nominal)}</div><div class="s">${ymLabel(fim.mes)}</div></div>
+    <div class="kpi"><div class="l">Em poder de compra de ${base}</div><div class="v blue">${fmtBRL0(fim.real)}</div><div class="s">${temIpca?"corrigido pelo IPCA":"sem IPCA informado"}</div></div>
+    <div class="kpi"><div class="l">Ganho nominal</div><div class="v ${gNom>=0?'pos':'neg'}">${gNom==null?"—":fmtPct(gNom)}</div><div class="s">desde ${ymLabel(ini.mes)}</div></div>
+    <div class="kpi"><div class="l">Ganho real</div><div class="v ${gReal>=0?'pos':'neg'}">${gReal==null?"—":fmtPct(gReal)}</div><div class="s">${perda!=null&&temIpca?`${fmtPct(perda)} comidos pela inflação`:"—"}</div></div>`;
+
+  mkChart("chReal",{type:"line",
+    data:{labels:serie.map(s=>ymLabel(s.mes)),datasets:[
+      {label:"Nominal",data:serie.map(s=>s.nominal),borderColor:"#9B958A",borderDash:[5,4],pointRadius:0,borderWidth:1.5,fill:false,tension:.25},
+      {label:`Real (${base})`,data:serie.map(s=>s.real),borderColor:"#3D5A80",backgroundColor:"rgba(61,90,128,.13)",fill:true,pointRadius:0,borderWidth:2,tension:.25},
+    ]},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{ticks:{callback:moneyTick}}},
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtBRL0(c.parsed.y||0)}`}}}}});
+}
+function abrirRealForm(){
+  const ipca = ipcaMap();
+  const pat = (DB.pat||[]).filter(p=>p&&p.mes);
+  const anos = [...new Set(pat.map(p=>p.mes.slice(0,4)))].sort();
+  $("realInputs").innerHTML = anos.map(a=>
+    `<div class="f"><label>IPCA ${a} (%)</label><input type="number" step="0.01" data-ipca="${a}" value="${ipca[a]??""}" placeholder="0,00"></div>`).join("");
+  $("realForm").style.display = "";
+}
+
 function renderAll(){
   const steps = [
     ["virtual", refreshVirtual],
@@ -3208,6 +3872,58 @@ document.addEventListener("DOMContentLoaded", ()=>{
     const b = e.target.closest("button"); if(!b) return;
     document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));
     document.querySelectorAll(".page").forEach(p=>p.classList.toggle("on",p.id==="p-"+b.dataset.p));
+  });
+
+  // decomposição aporte × rentabilidade
+  $("decRange").onchange = e => { decRange = +e.target.value || 0; renderDecomposicao(); };
+
+  // rebalanceamento
+  $("rebEditar").onclick = abrirRebForm;
+  $("rebCancel").onclick = ()=>{ $("rebForm").style.display="none"; };
+  $("rebInputs").addEventListener("input", atualizarSomaReb);
+  $("rebSalvar").onclick = ()=>{
+    const alvos = {};
+    document.querySelectorAll("[data-reb]").forEach(el=>{ const v=+el.value||0; if(v>0) alvos[el.dataset.reb]=v; });
+    const soma = Object.values(alvos).reduce((s,v)=>s+v,0);
+    if(Object.keys(alvos).length && Math.abs(soma-100)>0.5)
+      if(!confirm(`Os alvos somam ${soma.toFixed(1)}%, não 100%. Salvar mesmo assim?`)) return;
+    safeStore.set("fin_reb_alvos", JSON.stringify(alvos));
+    $("rebForm").style.display="none";
+    toast("Alvos de alocação salvos.");
+    renderRebalance();
+  };
+
+  // patrimônio real / IPCA
+  $("realBase").onchange = renderPatReal;
+  $("realEditar").onclick = abrirRealForm;
+  $("realCancel").onclick = ()=>{ $("realForm").style.display="none"; };
+  $("realSalvar").onclick = ()=>{
+    const ipca = {};
+    document.querySelectorAll("[data-ipca]").forEach(el=>{ const v=parseFloat(el.value); if(!isNaN(v)) ipca[el.dataset.ipca]=v; });
+    safeStore.set("fin_ipca", JSON.stringify(ipca));
+    $("realForm").style.display="none";
+    toast("IPCA salvo.");
+    renderPatReal();
+  };
+
+  // IR / ganho de capital
+  $("irAno").onchange = e => { irAnoSel = e.target.value; renderBtcIR(); };
+
+  // simulador de cenários BTC
+  $("simPx").addEventListener("input", e=>{
+    const v = parseFloat(e.target.value);
+    simPreco = isNaN(v)? 0 : v;
+    $("simQuick").querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+    renderBtcSim();
+  });
+  $("simQuick").addEventListener("click", e=>{
+    const b = e.target.closest("button"); if(!b) return;
+    const base = getBtcPx();
+    if(!base) return toast("Defina a cotação do BTC primeiro.");
+    simPreco = base * parseFloat(b.dataset.m);
+    $("simQuick").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
+    $("simPx").value = Math.round(simPreco);
+    renderBtcSim();
   });
 
   // rentabilidade acumulada
