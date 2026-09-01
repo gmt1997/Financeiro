@@ -682,6 +682,19 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="chartbox tall"><canvas id="chBtcAcc"></canvas></div>
   </div>
   <div class="card">
+    <h3>Evolução patrimonial em Bitcoin <span class="hint">— quantidade acumulada × cotação, mês a mês</span></h3>
+    <div class="bar">
+      <label class="muted" style="font-size:.8rem;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="btcPatQtyChk"> mostrar ₿ acumulado
+      </label>
+      <span class="spacer"></span>
+      <span class="pill" id="btcPatResumo"></span>
+    </div>
+    <div class="kpis mt" id="btcPatKpis"></div>
+    <div class="chartbox tall mt"><canvas id="chBtcPatrim"></canvas></div>
+    <p class="note mt">A área laranja é o valor de mercado da posição; a tracejada cinza é o custo investido (FIFO) — a distância entre as duas é o lucro não realizado. Só existe preço observado nos meses em que você operou; os demais são interpolados entre as ordens, e o mês atual usa a cotação definida acima. Se houver fechamento de patrimônio, a linha azul pontilhada mostra o valor de cripto que você registrou, para comparação.</p>
+  </div>
+  <div class="card">
     <h3>Lucro / prejuízo por safra <span class="hint">— cada safra é o conjunto de compras dentro de um período; vendas consomem as safras mais antigas primeiro (FIFO)</span></h3>
     <div class="bar mt">
       <span class="seg" id="btcSafraGroup" data-role="seg">
@@ -2088,6 +2101,167 @@ async function onAddPat(){
 
 /* ================= BITCOIN ================= */
 function getBtcPx(){ const v = safeStore.get("mesafin_btcpx"); return v? +v : null; }
+let btcPatQty = false;   // sobrepor a curva de quantidade acumulada
+/**
+ * Série mensal do valor da posição em BTC: quantidade acumulada × preço do mês.
+ * O preço vem, em ordem de prioridade: (1) preço médio das ordens do próprio mês,
+ * (2) interpolação linear entre os meses com ordem, (3) cotação atual para os
+ * meses posteriores à última ordem. O custo é apurado por FIFO, igual ao IR.
+ */
+function btcSerieValor(){
+  const ops = (DB.btc||[])
+    .filter(b => b && typeof b.data==="string" && /^\d{4}-\d{2}-\d{2}/.test(b.data) && +b.quantidade>0)
+    .sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
+  if(!ops.length) return {serie:[], temDados:false};
+
+  // preço observado por mês (média ponderada das ordens do mês)
+  const obs = new Map();
+  for(const b of ops){
+    const ym = b.data.slice(0,7);
+    const q = +b.quantidade, t = +b.total || (+b.preco||0)*q;
+    if(!obs.has(ym)) obs.set(ym, {q:0, t:0});
+    const o = obs.get(ym); o.q += q; o.t += t;
+  }
+  const precoObs = new Map();
+  for(const [ym,o] of obs) if(o.q>0) precoObs.set(ym, o.t/o.q);
+
+  // range de meses: da primeira ordem até o mês corrente (ou último fechamento)
+  const primeiro = ops[0].data.slice(0,7);
+  const hoje = new Date();
+  let ultimo = hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0");
+  const patMeses = (DB.pat||[]).filter(p=>p&&p.mes).map(p=>p.mes).sort();
+  if(patMeses.length && patMeses[patMeses.length-1] > ultimo) ultimo = patMeses[patMeses.length-1];
+  const meses = [];
+  { const [y0,m0]=primeiro.split("-").map(Number), [y1,m1]=ultimo.split("-").map(Number);
+    for(let y=y0, m=m0; (y<y1)||(y===y1&&m<=m1); m++){ if(m>12){m=1;y++;}
+      meses.push(y+"-"+String(m).padStart(2,"0")); if(meses.length>600) break; } }
+
+  // quantidade e custo (FIFO) ao fim de cada mês
+  const lotes = [];
+  const estado = new Map();
+  let iOp = 0;
+  for(const ym of meses){
+    while(iOp < ops.length && ops[iOp].data.slice(0,7) <= ym){
+      const b = ops[iOp];
+      if(b.operacao==="compra"){
+        lotes.push({qty:+b.quantidade, custo:+b.total||0});
+      } else {
+        let resta = +b.quantidade;
+        while(resta>1e-12 && lotes.length){
+          const l = lotes[0];
+          const usa = Math.min(l.qty, resta);
+          const c = l.qty>0 ? l.custo*(usa/l.qty) : 0;
+          l.qty -= usa; l.custo -= c; resta -= usa;
+          if(l.qty<=1e-12) lotes.shift();
+        }
+      }
+      iOp++;
+    }
+    let q=0,c=0; for(const l of lotes){ q+=l.qty; c+=l.custo; }
+    estado.set(ym, {qty:q, custo:c});
+  }
+
+  // preenche preços: observado → interpolado → cotação atual
+  const pxAtual = getBtcPx();
+  const idxObs = meses.map((ym,i)=> precoObs.has(ym) ? i : -1).filter(i=>i>=0);
+  const precos = new Array(meses.length).fill(null);
+  const fontes = new Array(meses.length).fill(null);
+  for(const i of idxObs){ precos[i] = precoObs.get(meses[i]); fontes[i] = "ordem"; }
+  // antes da primeira observação
+  for(let i=0;i<idxObs[0];i++){ precos[i]=precos[idxObs[0]]; fontes[i]="estimado"; }
+  // entre observações
+  for(let k=0;k<idxObs.length-1;k++){
+    const a=idxObs[k], b=idxObs[k+1];
+    for(let i=a+1;i<b;i++){
+      const t=(i-a)/(b-a);
+      precos[i] = precos[a] + (precos[b]-precos[a])*t;
+      fontes[i] = "interpolado";
+    }
+  }
+  // depois da última observação
+  const ultObs = idxObs[idxObs.length-1];
+  for(let i=ultObs+1;i<meses.length;i++){
+    if(pxAtual){
+      const t=(i-ultObs)/(meses.length-1-ultObs || 1);
+      precos[i] = precos[ultObs] + (pxAtual-precos[ultObs])*t;
+      fontes[i] = i===meses.length-1 ? "cotação" : "interpolado";
+    } else { precos[i]=precos[ultObs]; fontes[i]="estimado"; }
+  }
+  if(pxAtual && meses.length){ precos[meses.length-1]=pxAtual; fontes[meses.length-1]="cotação"; }
+
+  const patCripto = new Map((DB.pat||[]).filter(p=>p&&p.mes).map(p=>[p.mes, p.cripto||0]));
+  const serie = meses.map((ym,i)=>{
+    const e = estado.get(ym) || {qty:0,custo:0};
+    return {ym, qty:e.qty, custo:e.custo, preco:precos[i], fonte:fontes[i],
+      valor: e.qty*(precos[i]||0), patCripto: patCripto.get(ym) ?? null};
+  });
+  return {serie, temDados:true, temPatCripto:[...patCripto.values()].some(v=>v>0)};
+}
+function renderBtcPatrim(){
+  if(!$("chBtcPatrim")) return;
+  const {serie, temDados, temPatCripto} = btcSerieValor();
+  if(!temDados || serie.length<2){
+    $("btcPatKpis").innerHTML = `<div class="kpi"><div class="l">Valor da posição</div><div class="v muted">—</div><div class="s">registre ao menos 2 ordens</div></div>`;
+    $("btcPatResumo").textContent = "sem dados suficientes";
+    $("btcPatResumo").className = "pill";
+    mkChart("chBtcPatrim",{type:"line",data:{labels:[],datasets:[]},options:{maintainAspectRatio:false}});
+    return;
+  }
+  const fim = serie[serie.length-1];
+  const lp = fim.valor - fim.custo;
+  const lpPct = fim.custo>0 ? lp/fim.custo : null;
+  const pico = serie.reduce((m,s)=> s.valor>m.valor? s : m, serie[0]);
+  const ddAtual = pico.valor>0 ? (fim.valor-pico.valor)/pico.valor : 0;
+  // melhor e pior mês em variação de valor
+  let melhor=null, pior=null;
+  for(let i=1;i<serie.length;i++){
+    const d = serie[i].valor - serie[i-1].valor;
+    if(!melhor || d>melhor.d) melhor={ym:serie[i].ym, d};
+    if(!pior || d<pior.d) pior={ym:serie[i].ym, d};
+  }
+
+  const nObs = serie.filter(s=>s.fonte==="ordem").length;
+  $("btcPatResumo").textContent = `${serie.length} meses · ${ymLabel(serie[0].ym)} → ${ymLabel(fim.ym)} · ${nObs} com preço de ordem`;
+  $("btcPatResumo").className = "pill" + (lp>=0?" ok":" err");
+
+  $("btcPatKpis").innerHTML = `
+    <div class="kpi"><div class="l">Valor da posição</div><div class="v btc">${fmtBRL0(fim.valor)}</div><div class="s">${fmtBtc(fim.qty)} × ${fmtBRL0(fim.preco||0)}</div></div>
+    <div class="kpi"><div class="l">Custo (FIFO)</div><div class="v">${fmtBRL0(fim.custo)}</div><div class="s">preço médio ${fim.qty>0?fmtBRL0(fim.custo/fim.qty):"—"}</div></div>
+    <div class="kpi"><div class="l">L/P não realizado</div><div class="v ${lp>=0?'pos':'neg'}">${fmtBRL0(lp)}</div><div class="s ${lp>=0?'pos':'neg'}">${lpPct!=null?fmtPct(lpPct):"—"}</div></div>
+    <div class="kpi"><div class="l">Pico da posição</div><div class="v">${fmtBRL0(pico.valor)}</div><div class="s">${ymLabel(pico.ym)}${ddAtual<-0.005?` · hoje ${fmtPct(ddAtual)}`:" · é o topo"}</div></div>
+    <div class="kpi"><div class="l">Melhor mês</div><div class="v pos">${melhor?"+"+fmtBRL0(melhor.d):"—"}</div><div class="s">${melhor?ymLabel(melhor.ym):""}</div></div>
+    <div class="kpi"><div class="l">Pior mês</div><div class="v neg">${pior?fmtBRL0(pior.d):"—"}</div><div class="s">${pior?ymLabel(pior.ym):""}</div></div>`;
+
+  const ds = [
+    {type:"line",label:"Valor da posição",data:serie.map(s=>s.valor),
+      borderColor:"#B26A12",backgroundColor:"rgba(178,106,18,.16)",fill:true,tension:.25,pointRadius:0,borderWidth:2,yAxisID:"y",order:2},
+    {type:"line",label:"Custo investido (FIFO)",data:serie.map(s=>s.custo),
+      borderColor:"#6F6A61",borderDash:[5,4],fill:false,tension:.2,pointRadius:0,borderWidth:1.5,yAxisID:"y",order:1},
+  ];
+  if(temPatCripto) ds.push({type:"line",label:"Cripto no fechamento",data:serie.map(s=>s.patCripto),
+    borderColor:"#3D5A80",borderDash:[2,3],fill:false,pointRadius:0,borderWidth:1.2,yAxisID:"y",spanGaps:true,order:0});
+  if(btcPatQty) ds.push({type:"line",label:"₿ acumulado",data:serie.map(s=>s.qty),
+    borderColor:"#177E51",fill:false,stepped:true,pointRadius:0,borderWidth:1.4,yAxisID:"y1",order:3});
+
+  mkChart("chBtcPatrim",{
+    data:{labels:serie.map(s=>ymLabel(s.ym)),datasets:ds},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{
+        x:{grid:{display:false},ticks:{maxTicksLimit:16}},
+        y:{position:"left",ticks:{callback:moneyTick}},
+        ...(btcPatQty?{y1:{position:"right",grid:{drawOnChartArea:false},title:{display:true,text:"₿"},ticks:{callback:v=>v.toFixed(3)}}}:{})
+      },
+      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{
+        label:c=> c.dataset.yAxisID==="y1" ? ` ₿ acumulado: ${fmtBtc(c.parsed.y)}` : ` ${c.dataset.label}: ${fmtBRL0(c.parsed.y||0)}`,
+        afterBody:items=>{
+          const s = serie[items[0].dataIndex]; if(!s) return "";
+          const l = [`Preço usado: ${fmtBRL0(s.preco||0)}`, `Quantidade: ${fmtBtc(s.qty)}`];
+          const d = s.valor - s.custo;
+          l.push(`L/P: ${d>=0?"+":""}${fmtBRL0(d)}`);
+          if(s.fonte!=="ordem") l.push(s.fonte==="cotação" ? "· preço da cotação atual" : "· preço estimado entre ordens");
+          return l;
+        }}}}}});
+}
 function setBtcPx(v, src){ safeStore.set("mesafin_btcpx", String(v)); safeStore.set("mesafin_btcpx_src", src); }
 function renderBtc(){
   const s = btcStats();
@@ -2140,6 +2314,7 @@ function renderBtc(){
   mkChart("chBtcApo",{type:"bar",data:{labels:apoRows.map(r=>ymLabel(r[0])),datasets:[{label:"Aporte líquido",data:apoRows.map(r=>r[1]),backgroundColor:apoRows.map(r=>r[1]>=0?"rgba(178,106,18,.75)":"rgba(192,57,75,.68)"),borderRadius:2}]},
     options:{maintainAspectRatio:false,scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{ticks:{callback:moneyTick}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ttMoney}}}}});
 
+  renderBtcPatrim();
   renderBtcSafras(px);
   renderBtcIR();
   renderBtcDca();
@@ -2715,7 +2890,53 @@ function impDate(v){
   m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
   return null;
 }
-function colIdx(header, names){ const h=header.map(_nk); for(const n of names){ const i=h.indexOf(_nk(n)); if(i>=0) return i; } return -1; }
+/** Distância de Levenshtein (para tolerar erros de digitação no cabeçalho). */
+function _lev(a,b){
+  if(a===b) return 0;
+  const m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  let prev=Array.from({length:n+1},(_,j)=>j), cur=new Array(n+1);
+  for(let i=1;i<=m;i++){
+    cur[0]=i;
+    for(let j=1;j<=n;j++){
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    [prev,cur]=[cur,prev];
+  }
+  return prev[n];
+}
+/**
+ * Localiza a coluna pelo nome. Tenta, em ordem:
+ *   1) igualdade exata (normalizada)
+ *   2) o cabeçalho conter o nome procurado (ou vice-versa)
+ *   3) similaridade aproximada — tolera 1 erro de digitação a cada ~6 letras,
+ *      para que "Catevgoria" ainda case com "categoria".
+ * Registra em _impAvisos quando o casamento não foi exato, para avisar o usuário.
+ */
+let _impAvisos = [];
+function colIdx(header, names){
+  const h = header.map(_nk);
+  for(const n of names){ const i=h.indexOf(_nk(n)); if(i>=0) return i; }
+  // 2) contido
+  for(const n of names){
+    const alvo=_nk(n); if(alvo.length<4) continue;
+    const i = h.findIndex(x => x && (x.includes(alvo) || alvo.includes(x)) && Math.abs(x.length-alvo.length)<=4);
+    if(i>=0){ _impAvisos.push({col:header[i], esperado:n, tipo:"parcial"}); return i; }
+  }
+  // 3) aproximado
+  let melhor=-1, melhorD=Infinity, melhorN=null;
+  for(const n of names){
+    const alvo=_nk(n); if(alvo.length<4) continue;
+    const tol = Math.max(1, Math.floor(alvo.length/6));
+    h.forEach((x,i)=>{
+      if(!x || x.length<3) return;
+      const d=_lev(x,alvo);
+      if(d<=tol && d<melhorD){ melhorD=d; melhor=i; melhorN=n; }
+    });
+  }
+  if(melhor>=0){ _impAvisos.push({col:header[melhor], esperado:melhorN, tipo:"aproximado"}); return melhor; }
+  return -1;
+}
 function detectType(header){
   const h=header.map(_nk); const has=(...n)=>n.some(x=>h.includes(_nk(x)));
   if(has("ordem","operacao") && has("quantidade","qtd")) return "btc";
@@ -2817,6 +3038,7 @@ async function handleImportFile(file){
     const isCsv=/\.csv$/i.test(file.name);
     const wb=XLSX.read(buf,{type:"array",cellDates:true,raw:!isCsv});
     const found={tx:[],btc:[],pat:[],cc:[]};
+    _impAvisos = [];   // coletados por colIdx durante o parse de cada aba
     for(const nm of wb.SheetNames){
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:!isCsv,blankrows:false,defval:null});
       const parsed=parseSheet(rows); if(!parsed) continue;
@@ -2833,6 +3055,9 @@ async function handleImportFile(file){
     const totalRaw=found.tx.length+found.btc.length+found.pat.length+found.cc.length;
     if(!totalRaw){ st.className="pill err"; stx.textContent="Nenhuma aba reconhecida (esperado: DADOS DRE, BTC, Patrimônio ou fatura de cartão)."; return; }
     st.className="pill ok"; stx.textContent="Arquivo lido ✓";
+    // dedup dos avisos de cabeçalho (uma linha por coluna)
+    const vistos=new Set();
+    window._impAvisosSnapshot = _impAvisos.filter(a=>{ const k=a.col+"|"+a.esperado; if(vistos.has(k)) return false; vistos.add(k); return true; });
     window._imp=found; renderImportPreview();
   }catch(e){ st.className="pill err"; stx.textContent="Erro ao ler: "+(e.message||e); }
 }
@@ -2866,9 +3091,26 @@ function renderImportPreview(){
       <input type="month" id="impMes" value="${cur}" style="width:160px">
       <span class="st">${det?`detectado pela aba: <b>${det}</b>`:"informe o mês de referência"} · compras de datas anteriores entram nesta fatura</span></div>`;
   }
+  // avisos de leitura do cabeçalho / dados faltando
+  let avisos = "";
+  const av = [];
+  for(const a of (window._impAvisosSnapshot||[])){
+    av.push(`Coluna <b>“${a.col}”</b> foi lida como <b>${a.esperado}</b>${a.tipo==="aproximado"?" (grafia diferente do esperado)":""}.`);
+  }
+  if(f.cc.length){
+    const semCat = f.cc.filter(c=>!c.categoria).length;
+    if(semCat === f.cc.length) av.push(`⚠ Nenhuma das ${f.cc.length} compras trouxe categoria — confira se existe uma coluna <b>Categoria</b> na planilha.`);
+    else if(semCat > 0) av.push(`${semCat} de ${f.cc.length} compras sem categoria na planilha.`);
+  }
+  if(f.tx.length){
+    const semCat = f.tx.filter(t=>!t.categoria || t.categoria==="OUTROS").length;
+    if(semCat === f.tx.length && f.tx.length>1) av.push(`⚠ Nenhum dos ${f.tx.length} lançamentos trouxe categoria — confira a coluna <b>Categoria</b>.`);
+  }
+  if(av.length) avisos = `<div class="improw" style="display:block"><div class="st" style="line-height:1.7">${av.map(x=>"• "+x).join("<br>")}</div></div>`;
+
   $("impPreview").innerHTML =
     row("tx","Lançamentos",tx)+row("btc","Ordens BTC",btc)+row("pat","Patrimônio",pat)+
-    row("cc","Compras de cartão",cc)+mesBox+
+    row("cc","Compras de cartão",cc)+mesBox+avisos+
     `<div class="bar mt"><button class="btn pri" id="impDo">Importar selecionados</button>
        <span class="note">Modo atual: <b>${DB.mode==="supabase"?"Supabase (grava no banco)":"Local (salvo no navegador)"}</b></span></div>`;
   $("impDo").onclick=doImport;
@@ -3908,6 +4150,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   // IR / ganho de capital
   $("irAno").onchange = e => { irAnoSel = e.target.value; renderBtcIR(); };
+  $("btcPatQtyChk").onchange = e => { btcPatQty = e.target.checked; renderBtcPatrim(); };
 
   // simulador de cenários BTC
   $("simPx").addEventListener("input", e=>{
