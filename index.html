@@ -949,7 +949,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
 </main>
 <div class="toast" id="toast"></div>
 
-<script>window.SEED={"dcats":["ALIMENTAÇÃO","FACILIDADES","LAZER","MARKETING","MORADIA","NAMORO","OUTROS/IMPREVISTOS","SAÚDE","TRANSPORTE","VESTUÁRIO"],"rcats":["AUX. TRANSPORTE","BOLSA MONITORIA","CASHBACK","ESPORÁDICO","EXTRAS","IRPF RESTITUIÇÃO","MESADA","RENDA PASSIVA","SALÁRIO","TICKET"],"tx":[],"btc":[],"pat":[]};</script>
+<script>window.SEED={"dcats":["ALIMENTAÇÃO","FACILIDADES","LAZER","MARKETING","MORADIA","NAMORO","OUTROS/IMPREVISTOS","SAÚDE","TRANSPORTE","VESTUÁRIO","VIAGEM"],"rcats":["AUX. TRANSPORTE","BOLSA MONITORIA","CASHBACK","ESPORÁDICO","EXTRAS","IRPF RESTITUIÇÃO","MESADA","RENDA PASSIVA","SALÁRIO","TICKET"],"tx":[],"btc":[],"pat":[]};</script>
 <script>
 "use strict";
 /* ===================== CONFIGURAÇÃO DO SUPABASE =====================
@@ -2954,6 +2954,7 @@ function matchCat(v){
   if(hit) return hit;
   const alias={"alimentacao":"ALIMENTAÇÃO","mercado":"ALIMENTAÇÃO","transporte":"TRANSPORTE",
     "saude":"SAÚDE","lazer":"LAZER","vestuario":"VESTUÁRIO","moradia":"MORADIA",
+    "viagem":"VIAGEM","viagens":"VIAGEM","turismo":"VIAGEM",
     "facilidades":"FACILIDADES","namoro":"NAMORO","marketing":"MARKETING","outros":"OUTROS/IMPREVISTOS"};
   return alias[k] || String(v).trim().toUpperCase();
 }
@@ -3247,7 +3248,8 @@ function gsAbrir(i){
  *  Evite termos curtos/genéricos aqui — eles geram falso positivo. */
 const CAT_KEYWORDS = [
   [["ifood","rappi","uber eats","zedelivery","ze delivery","restaurante","padaria","pizzaria","burger","mcdonald","subway","starbucks","cafeteria","lanchonete","acai","sushi","churrascaria","assai","atacadao","carrefour","pao de acucar","supermercado","hortifruti","emporio","sacolao","st marche","natural da terra","zona sul","big box"],"ALIMENTAÇÃO"],
-  [["uber","99app","99 pop","99pop","cabify","posto shell","posto ipiranga","petrobras","estacionamento","estapar","autopass","bilhete unico","cptm","viacao","localiza","movida","unidas","sem parar","conectcar","veloe","gol linhas","latam","azul linhas","decolar","123milhas","aeroporto"],"TRANSPORTE"],
+  [["uber","99app","99 pop","99pop","cabify","posto shell","posto ipiranga","petrobras","estacionamento","estapar","autopass","bilhete unico","cptm","viacao","sem parar","conectcar","veloe"],"TRANSPORTE"],
+  [["gol linhas","latam","azul linhas","tap air","american airlines","copa airlines","air france","iberia","emirates","aeroporto","decolar","123milhas","maxmilhas","kayak","skyscanner","booking.com","airbnb","hoteis.com","hotels.com","expedia","trivago","hotel","pousada","resort","hostel","cvc","cvc viagens","submarino viagens","rentcar","rent a car","hertz","seguro viagem","assist card","duty free","milhas","smiles","livelo viagens"],"VIAGEM"],
   [["drogaria","drogasil","droga raia","droga pacheco","panvel","farmacia","ultrafarma","hospital","clinica","laboratorio","fleury","delboni","dasa","einstein","unimed","sulamerica saude","bradesco saude","odonto","dentista","psicologo","psicologa","terapia","smartfit","smart fit","bluefit","academia","bodytech","gympass","wellhub","totalpass"],"SAÚDE"],
   [["netflix","spotify","disney plus","disneyplus","hbo","prime video","amazon prime","globoplay","paramount","apple.com","itunes","google play","youtube","deezer","twitch","steam games","playstation","nintendo","cinema","cinemark","kinoplex","ingresso.com","ticketmaster","sympla","eventim","teatro","cervejaria","boteco"],"LAZER"],
   [["aluguel","condominio","iptu","enel","cemig","copel","eletropaulo","sabesp","comgas","internet","vivo fibra","telefonica","seguro residencial","imobiliaria","material de construcao","leroy","telhanorte","obramax"],"MORADIA"],
