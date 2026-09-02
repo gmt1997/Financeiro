@@ -367,6 +367,22 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="chartbox tall"><canvas id="chFlow"></canvas></div>
   </div>
   <div class="card">
+    <h3>Taxa de poupança <span class="hint">— quanto de cada real que entra você consegue guardar</span></h3>
+    <div class="bar">
+      <span class="seg" id="poupGroupSeg">
+        <button class="on" data-v="mes">Mês</button>
+        <button data-v="tri">Trimestre</button>
+        <button data-v="sem">Semestre</button>
+        <button data-v="ano">Ano</button>
+      </span>
+      <span class="spacer"></span>
+      <span class="pill" id="poupResumo"></span>
+    </div>
+    <div class="kpis mt" id="poupKpis"></div>
+    <div class="chartbox tall mt"><canvas id="chPoup"></canvas></div>
+    <p class="note mt">Taxa = (receitas − despesas) ÷ receitas do período. A linha tracejada é a média do período exibido; a faixa pontilhada marca sua meta. Meses com taxa negativa (gastou mais do que entrou) aparecem em vermelho.</p>
+  </div>
+  <div class="card">
     <h3>Projeção de fluxo · próximos 12 meses</h3>
     <div class="hint">Parcelas de cartão já conhecidas + estimativa de receitas/despesas pela média histórica. Barras cinza = comprometido de cartão (certo) · linha = saldo projetado.</div>
     <div class="chartbox tall"><canvas id="chProj"></canvas></div>
@@ -914,6 +930,14 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     </div>
   </div>
   <div class="card">
+    <h3>Meta de taxa de poupança</h3>
+    <div class="hint">Percentual da receita que você pretende guardar por mês. Aparece como linha de referência no gráfico "Taxa de poupança" da Visão Geral, e os períodos que atingirem a meta ficam em verde forte.</div>
+    <div class="form">
+      <div class="f"><label>Meta (% da receita)</label><input type="number" id="cfgPoupMeta" min="1" max="90" step="1" style="width:100px"></div>
+      <div class="f"><label>&nbsp;</label><button class="btn" id="cfgPoupSave">Salvar</button></div>
+    </div>
+  </div>
+  <div class="card">
     <h3>Exposição ao Bitcoin</h3>
     <div class="hint">Define o alvo de participação do Bitcoin no seu patrimônio. Aparece na aba Patrimônio com barra visual e alerta de risco quando a exposição ultrapassa o alvo. Sugerido: 10% a 25% conforme seu apetite a risco.</div>
     <div class="form">
@@ -1304,6 +1328,74 @@ function groupFlow(rows, period){
     if(!m.has(key)) m.set(key,{key,label,rec:0,des:0}); const o=m.get(key); o.rec+=r.rec; o.des+=r.des; }
   return [...m.values()].map(o=>({...o,saldo:o.rec-o.des}));
 }
+/* === Taxa de poupança por período === */
+let poupGroup = "mes";
+const poupMeta = () => +(safeStore.get("fin_poup_meta") || "30");
+function renderPoupanca(all){
+  if(!$("chPoup")) return;
+  const g = groupFlow(all, poupGroup);
+  if(!g.length){
+    $("poupResumo").textContent = "sem dados";
+    $("poupResumo").className = "pill";
+    $("poupKpis").innerHTML = "";
+    mkChart("chPoup",{type:"bar",data:{labels:[],datasets:[]},options:{maintainAspectRatio:false}});
+    return;
+  }
+  // taxa por período (null quando não houve receita — evita divisão por zero)
+  const linhas = g.map(x=>({...x, taxa: x.rec>0 ? x.saldo/x.rec : null}));
+  const validos = linhas.filter(l=>l.taxa!=null);
+  const meta = poupMeta();
+
+  // média ponderada do período (soma dos saldos ÷ soma das receitas) — mais correta
+  // que a média das taxas, porque respeita o peso de cada mês
+  const somaRec = linhas.reduce((s,l)=>s+l.rec,0);
+  const somaSaldo = linhas.reduce((s,l)=>s+l.saldo,0);
+  const mediaPond = somaRec>0 ? somaSaldo/somaRec : null;
+
+  const acimaMeta = validos.filter(l=>l.taxa*100>=meta).length;
+  const negativos = validos.filter(l=>l.taxa<0).length;
+  const melhor = validos.reduce((m,l)=> !m||l.taxa>m.taxa? l:m, null);
+  const pior  = validos.reduce((m,l)=> !m||l.taxa<m.taxa? l:m, null);
+  const ultimo = validos.length? validos[validos.length-1] : null;
+
+  const perLabel = poupGroup==="mes"?"mês":poupGroup==="tri"?"trimestre":poupGroup==="sem"?"semestre":"ano";
+  $("poupResumo").textContent = `${validos.length} ${perLabel}(es) · ${acimaMeta} acima da meta de ${meta}%`;
+  $("poupResumo").className = "pill" + (mediaPond!=null ? (mediaPond*100>=meta?" ok":"") : "");
+
+  $("poupKpis").innerHTML = `
+    <div class="kpi"><div class="l">Média do período</div><div class="v ${mediaPond>=0?'pos':'neg'}">${mediaPond!=null?fmtPct(mediaPond):"—"}</div><div class="s">${fmtBRL0(somaSaldo)} de ${fmtBRL0(somaRec)}</div></div>
+    <div class="kpi"><div class="l">Último ${perLabel}</div><div class="v ${ultimo&&ultimo.taxa>=0?'pos':'neg'}">${ultimo?fmtPct(ultimo.taxa):"—"}</div><div class="s">${ultimo?ultimo.label:""}</div></div>
+    <div class="kpi"><div class="l">Melhor ${perLabel}</div><div class="v pos">${melhor?fmtPct(melhor.taxa):"—"}</div><div class="s">${melhor?melhor.label:""}</div></div>
+    <div class="kpi"><div class="l">Pior ${perLabel}</div><div class="v ${pior&&pior.taxa<0?'neg':''}">${pior?fmtPct(pior.taxa):"—"}</div><div class="s">${pior?pior.label:""}</div></div>
+    <div class="kpi"><div class="l">Acima da meta</div><div class="v">${acimaMeta}/${validos.length}</div><div class="s">meta de ${meta}%${negativos?` · ${negativos} negativo(s)`:""}</div></div>`;
+
+  const dados = linhas.map(l=>l.taxa==null? null : l.taxa*100);
+  const cores = linhas.map(l=>{
+    if(l.taxa==null) return "rgba(159,153,141,.35)";
+    if(l.taxa<0) return "rgba(192,57,75,.72)";
+    return l.taxa*100>=meta ? "rgba(23,126,81,.72)" : "rgba(23,126,81,.34)";
+  });
+  const mediaLinha = mediaPond!=null ? linhas.map(()=>mediaPond*100) : null;
+
+  const ds = [{type:"bar",label:"Taxa de poupança",data:dados,backgroundColor:cores,borderRadius:2,order:3}];
+  if(mediaLinha) ds.push({type:"line",label:"Média do período",data:mediaLinha,
+    borderColor:"#6F6A61",borderDash:[5,4],pointRadius:0,borderWidth:1.4,fill:false,order:2});
+  ds.push({type:"line",label:`Meta (${meta}%)`,data:linhas.map(()=>meta),
+    borderColor:"#B26A12",borderDash:[2,3],pointRadius:0,borderWidth:1.2,fill:false,order:1});
+
+  mkChart("chPoup",{
+    data:{labels:linhas.map(l=>l.label),datasets:ds},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:poupGroup==="mes"?24:20}},
+        y:{ticks:{callback:v=>v.toFixed(0)+"%"},title:{display:true,text:"% da receita"}}},
+      plugins:{legend:{labels:{boxWidth:10,filter:i=>i.text!=="Taxa de poupança"}},
+        tooltip:{callbacks:{
+          label:c=> c.parsed.y==null? " sem receita no período" : ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}%`,
+          afterBody:items=>{
+            const l = linhas[items[0].dataIndex]; if(!l) return "";
+            return [`Receitas: ${fmtBRL0(l.rec)}`,`Despesas: ${fmtBRL0(l.des)}`,`Guardado: ${fmtBRL0(l.saldo)}`];
+          }}}}}});
+}
 /* === Mês em curso: realizado + projeção + progresso do dia === */
 function renderMesEmCurso(all){
   const now = new Date();
@@ -1637,6 +1729,7 @@ function renderHome(){
   $("homeCount").textContent = `${DB.tx.length.toLocaleString("pt-BR")} lançamentos · ${all[0].ym} → ${all[all.length-1].ym}`;
 
   renderMesEmCurso(all);
+  renderPoupanca(all);
   renderAlertas(all);
   renderYoY(all);
   renderProjFuturo(all);
@@ -4219,6 +4312,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
   // home
   $("homeGroupSeg").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return;
     homeGroup=b.dataset.v; $("homeGroupSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); renderHome(); });
+  $("poupGroupSeg").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return;
+    poupGroup=b.dataset.v; $("poupGroupSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); renderHome(); });
   $("homeRange").onchange = renderHome;
   $("homeMonth").onchange = renderHome;
 
@@ -4334,6 +4429,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
     $("cfgMetaSave").onclick = ()=>{ const v=+$("cfgMetaPct").value;
       if(isNaN(v)||v<1||v>50) return toast("Informe um valor entre 1% e 50%.");
       safeStore.set("fin_meta_desp_pct", String(v)); toast("Meta atualizada para "+v+"% abaixo da média."); renderAll(); }; }
+
+  // meta de taxa de poupança
+  if($("cfgPoupMeta")){ $("cfgPoupMeta").value = safeStore.get("fin_poup_meta") || "30";
+    $("cfgPoupSave").onclick = ()=>{ const v=+$("cfgPoupMeta").value;
+      if(isNaN(v)||v<1||v>90) return toast("Informe um valor entre 1% e 90%.");
+      safeStore.set("fin_poup_meta", String(v)); toast("Meta de poupança atualizada para "+v+"%."); renderAll(); }; }
 
   // meta de exposição BTC
   if($("cfgBtcExpo")){ $("cfgBtcExpo").value = safeStore.get("fin_btc_expo_meta") || "20";
