@@ -42,6 +42,34 @@ html[data-tema="escuro"] .toast{background:var(--text);color:#131211}
 .temaBtn{background:var(--panel2);border:1px solid var(--line2);color:var(--text);border-radius:8px;width:32px;height:31px;font-size:.9rem;line-height:1}
 .temaBtn:hover{border-color:var(--dim)}
 .card2{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
+
+/* ---------- Relatório mensal ---------- */
+.relOverlay{position:fixed;inset:0;z-index:200;background:var(--bg);overflow-y:auto}
+.relOverlay[hidden]{display:none}
+.relBar{position:sticky;top:0;display:flex;align-items:center;gap:10px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);z-index:2}
+.relPage{max-width:820px;margin:22px auto 60px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:34px 38px}
+.relPage h1{font-family:var(--disp);font-size:1.5rem;margin:0 0 2px}
+.relPage .relSub{color:var(--muted);font-size:.84rem;margin-bottom:20px}
+.relPage h2{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.relGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.relKpi{border:1px solid var(--line);border-radius:9px;padding:11px 13px}
+.relKpi .l{font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.relKpi .v{font-family:var(--mono);font-size:1.15rem;margin-top:3px}
+.relKpi .s{font-size:.72rem;color:var(--muted);margin-top:2px}
+.relPage table{width:100%;border-collapse:collapse;font-size:.82rem}
+.relPage th{text-align:left;font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);padding:6px 8px;border-bottom:1px solid var(--line)}
+.relPage td{padding:6px 8px;border-bottom:1px solid var(--line)}
+.relPage .foot{margin-top:30px;padding-top:12px;border-top:1px solid var(--line);color:var(--dim);font-size:.72rem}
+@media print{
+  @page{size:A4;margin:14mm}
+  body>*:not(.relOverlay){display:none !important}
+  .relOverlay{position:static;overflow:visible;background:#fff}
+  .relOverlay .noprint{display:none !important}
+  .relPage{max-width:none;margin:0;border:0;border-radius:0;padding:0;background:#fff;color:#000}
+  .relPage h2{break-after:avoid}
+  .relPage table{break-inside:auto}
+  .relPage tr{break-inside:avoid}
+}
 @media(max-width:820px){ .navtools{width:100%;padding:0 0 8px} .gsWrap{flex:1} .gsWrap input,.gsWrap input:focus{width:100%} .gsRes{width:100%} }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-size:15px}
@@ -350,6 +378,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="seg" id="homeGroupSeg"><button data-v="mes" class="on">Mês</button><button data-v="tri">Trimestre</button><button data-v="sem">Semestre</button><button data-v="ano">Ano</button></div>
     <select id="homeMonth"></select>
     <span class="spacer"></span>
+    <button class="btn" id="relBtn" title="Gerar relatório do mês selecionado para impressão ou PDF">Relatório do mês</button>
     <span class="pill" id="homeCount"></span>
   </div>
   <div class="kpis" id="homeKpis"></div>
@@ -427,6 +456,19 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
       <div class="f"><label>&nbsp;</label><button class="btn pri" id="nAdd">Adicionar</button></div>
     </div>
   </div>
+  <div class="card" id="recLancCard">
+    <h3>Lançar recorrentes do mês <span class="hint">— despesas e receitas que se repetem e ainda não apareceram neste mês</span></h3>
+    <div class="bar">
+      <select id="recLancMes"></select>
+      <span class="spacer"></span>
+      <span class="pill" id="recLancResumo"></span>
+      <button class="btn" id="recLancCalc">Verificar pendentes</button>
+      <button class="btn pri" id="recLancAdd" disabled>Lançar selecionados</button>
+    </div>
+    <div id="recLancVazio" class="note mt">Clique em <b>Verificar pendentes</b> para ver o que costuma cair todo mês e ainda não foi lançado.</div>
+    <div class="twrap mt" id="recLancWrap" style="max-height:400px;overflow-y:auto;display:none"><table id="tblRecLanc"></table></div>
+    <p class="note mt">Considera itens que apareceram em pelo menos 3 dos últimos 6 meses. O valor sugerido é o do último lançamento e o dia é o mais frequente — ambos editáveis antes de confirmar. Itens pagos no cartão não entram aqui, porque já chegam pela fatura.</p>
+  </div>
   <div class="bar">
     <select id="fAno"></select>
     <select id="fMes"></select>
@@ -468,6 +510,18 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
       <div class="hint">Compras parceladas com parcelas ainda a vencer</div>
       <div class="twrap" style="max-height:260px;overflow-y:auto"><table id="tblCcParc"></table></div>
     </div>
+  </div>
+  <div class="card" id="dupCard">
+    <h3>Compras duplicadas <span class="hint">— mesma data, valor, descrição e cartão</span></h3>
+    <div class="bar">
+      <span class="pill" id="dupResumo"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="dupCalc">Procurar duplicatas</button>
+      <button class="btn pri" id="dupExcluir" disabled>Excluir selecionadas</button>
+    </div>
+    <div id="dupVazio" class="note mt">Clique em <b>Procurar duplicatas</b> para varrer o histórico de compras.</div>
+    <div class="twrap mt" id="dupWrap" style="max-height:420px;overflow-y:auto;display:none"><table id="tblDup"></table></div>
+    <p class="note mt">Cada grupo mostra as cópias encontradas. A <b>primeira de cada grupo fica desmarcada</b> (é a que se mantém) e as repetidas vêm marcadas para exclusão — revise antes de confirmar. Compras parceladas legítimas com mesma data e valor não são agrupadas quando o número da parcela difere.</p>
   </div>
   <div class="card" id="catSugCard">
     <h3>Categorizar compras <span class="hint">— sugestões por palavra-chave e pelo que você já categorizou antes</span></h3>
@@ -972,6 +1026,15 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
 
 </main>
 <div class="toast" id="toast"></div>
+<div class="relOverlay" id="relOverlay" hidden>
+  <div class="relBar noprint">
+    <b>Relatório mensal</b>
+    <span class="spacer"></span>
+    <button class="btn" id="relPrint">Imprimir / salvar PDF</button>
+    <button class="btn" id="relClose">Fechar</button>
+  </div>
+  <div class="relPage" id="relPage"></div>
+</div>
 
 <script>window.SEED={"dcats":["ALIMENTAÇÃO","FACILIDADES","LAZER","MARKETING","MORADIA","NAMORO","OUTROS/IMPREVISTOS","SAÚDE","TRANSPORTE","VESTUÁRIO","VIAGEM"],"rcats":["AUX. TRANSPORTE","BOLSA MONITORIA","CASHBACK","ESPORÁDICO","EXTRAS","IRPF RESTITUIÇÃO","MESADA","RENDA PASSIVA","SALÁRIO","TICKET"],"tx":[],"btc":[],"pat":[]};</script>
 <script>
@@ -3335,6 +3398,300 @@ function gsAbrir(i){
   it.acao();
 }
 
+/* ================= RELATÓRIO MENSAL ================= */
+function gerarRelatorio(){
+  const all = monthlyAgg();
+  if(!all.length) return toast("Sem dados para gerar o relatório.");
+  const ym = ($("homeMonth") && $("homeMonth").value) || all[all.length-1].ym;
+  const cur = all.find(r=>r.ym===ym) || all[all.length-1];
+  const idx = all.findIndex(r=>r.ym===cur.ym);
+  const ant = idx>0 ? all[idx-1] : null;
+  const anoAnt = all.find(r=>r.ym===`${+cur.ym.slice(0,4)-1}-${cur.ym.slice(5,7)}`);
+  const hist = all.slice(Math.max(0,idx-12), idx);
+  const medRec = hist.length? hist.reduce((s,r)=>s+r.rec,0)/hist.length : 0;
+  const medDes = hist.length? hist.reduce((s,r)=>s+r.des,0)/hist.length : 0;
+  const taxa = cur.rec>0 ? cur.saldo/cur.rec : null;
+
+  // despesas por categoria no mês
+  const cats = new Map();
+  for(const t of allTx()){
+    if(t.tipo!=="DESPESA" || t.data.slice(0,7)!==cur.ym) continue;
+    cats.set(t.categoria||"—",(cats.get(t.categoria||"—")||0)+t.valor);
+  }
+  const catsOrd = [...cats.entries()].sort((a,b)=>b[1]-a[1]);
+  const medCat = new Map();
+  for(const t of allTx()){
+    if(t.tipo!=="DESPESA") continue;
+    const ymT=t.data.slice(0,7);
+    if(ymT>=cur.ym || !hist.some(h=>h.ym===ymT)) continue;
+    medCat.set(t.categoria||"—",(medCat.get(t.categoria||"—")||0)+t.valor);
+  }
+  const nHist = hist.length||1;
+
+  // maiores lançamentos
+  const maiores = allTx().filter(t=>t.tipo==="DESPESA" && t.data.slice(0,7)===cur.ym)
+    .sort((a,b)=>b.valor-a.valor).slice(0,10);
+
+  // patrimônio
+  const pat = (DB.pat||[]).filter(p=>p&&p.mes).sort((a,b)=>a.mes<b.mes?-1:1);
+  const pAtual = pat.find(p=>p.mes===cur.ym) || (pat.length?pat[pat.length-1]:null);
+  const pIdx = pAtual? pat.indexOf(pAtual) : -1;
+  const pAnt = pIdx>0? pat[pIdx-1] : null;
+  const totPat = pAtual ? (pAtual.patrimonio || PAT_CLASSES.reduce((s,[k])=>s+(pAtual[k]||0),0)) : null;
+  const totPatAnt = pAnt ? (pAnt.patrimonio || PAT_CLASSES.reduce((s,[k])=>s+(pAnt[k]||0),0)) : null;
+
+  const dif = (a,b) => b ? `${a>=b?"+":""}${fmtPct((a-b)/Math.abs(b))}` : "—";
+  const linha = (lbl,val,sub,cls="") =>
+    `<div class="relKpi"><div class="l">${lbl}</div><div class="v ${cls}">${val}</div><div class="s">${sub||""}</div></div>`;
+
+  $("relPage").innerHTML = `
+    <h1>Relatório de ${ymLabel(cur.ym)}</h1>
+    <div class="relSub">Gerado em ${new Date().toLocaleDateString("pt-BR")} · Financeiro</div>
+
+    <h2>Resumo do mês</h2>
+    <div class="relGrid">
+      ${linha("Receitas", fmtBRL0(cur.rec), `média 12m ${fmtBRL0(medRec)}`, "pos")}
+      ${linha("Despesas", fmtBRL0(cur.des), `média 12m ${fmtBRL0(medDes)}`, "neg")}
+      ${linha("Saldo", fmtBRL0(cur.saldo), taxa!=null?`taxa de poupança ${fmtPct(taxa)}`:"", cur.saldo>=0?"pos":"neg")}
+      ${linha("vs. mês anterior", ant? dif(cur.saldo, ant.saldo) : "—", ant?`saldo de ${ymLabel(ant.ym)}: ${fmtBRL0(ant.saldo)}`:"sem mês anterior")}
+      ${linha("vs. mesmo mês do ano passado", anoAnt? dif(cur.des, anoAnt.des) : "—", anoAnt?`despesas em ${ymLabel(anoAnt.ym)}: ${fmtBRL0(anoAnt.des)}`:"sem histórico", "")}
+      ${linha("Patrimônio", totPat!=null? fmtBRL0(totPat):"—", totPatAnt!=null?`${totPat>=totPatAnt?"+":""}${fmtBRL0(totPat-totPatAnt)} no mês`:"", "blue")}
+    </div>
+
+    <h2>Despesas por categoria</h2>
+    <table><thead><tr><th>Categoria</th><th style="text-align:right">Valor</th><th style="text-align:right">% do mês</th><th style="text-align:right">Média 12m</th><th style="text-align:right">Variação</th></tr></thead><tbody>
+    ${catsOrd.map(([c,v])=>{
+      const m = (medCat.get(c)||0)/nHist;
+      const d = m>0 ? (v-m)/m : null;
+      return `<tr><td>${c}</td><td style="text-align:right">${fmtBRL0(v)}</td>
+        <td style="text-align:right">${cur.des>0?fmtPct(v/cur.des):"—"}</td>
+        <td style="text-align:right">${m>0?fmtBRL0(m):"—"}</td>
+        <td style="text-align:right" class="${d==null?"":d>0?"neg":"pos"}">${d==null?"—":(d>0?"+":"")+fmtPct(d)}</td></tr>`;
+    }).join("")}
+    <tr><td><b>Total</b></td><td style="text-align:right"><b>${fmtBRL0(cur.des)}</b></td><td style="text-align:right"><b>100%</b></td><td style="text-align:right"><b>${fmtBRL0(medDes)}</b></td><td></td></tr>
+    </tbody></table>
+
+    <h2>Maiores despesas do mês</h2>
+    <table><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th></tr></thead><tbody>
+    ${maiores.map(t=>`<tr><td>${t.data.split("-").reverse().join("/")}</td><td>${t.descricao||"—"}</td><td>${t.categoria||"—"}</td><td style="text-align:right">${fmtBRL(t.valor)}</td></tr>`).join("") || `<tr><td colspan="4">Sem despesas no mês.</td></tr>`}
+    </tbody></table>
+
+    ${pAtual? `<h2>Composição do patrimônio</h2>
+    <table><thead><tr><th>Classe</th><th style="text-align:right">Valor</th><th style="text-align:right">% do total</th></tr></thead><tbody>
+    ${PAT_CLASSES.map(([k,nome])=>({nome,v:pAtual[k]||0})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v)
+      .map(x=>`<tr><td>${x.nome}</td><td style="text-align:right">${fmtBRL0(x.v)}</td><td style="text-align:right">${totPat>0?fmtPct(x.v/totPat):"—"}</td></tr>`).join("")}
+    <tr><td><b>Total</b></td><td style="text-align:right"><b>${fmtBRL0(totPat)}</b></td><td style="text-align:right"><b>100%</b></td></tr>
+    </tbody></table>`:""}
+
+    <div class="foot">Relatório gerado automaticamente a partir dos lançamentos registrados. Valores de cartão consideram as compras da fatura do período.</div>`;
+
+  $("relOverlay").hidden = false;
+}
+
+/* ================= LANÇAMENTOS RECORRENTES ================= */
+let recLancLista = [];
+/**
+ * Encontra itens que se repetem mês a mês (>=3 dos últimos 6 meses) e que ainda
+ * não foram lançados no mês-alvo. Ignora o que é pago no cartão, porque essas
+ * despesas entram pela fatura e seriam contadas duas vezes.
+ */
+function acharRecorrentesPendentes(mesAlvo){
+  const meses = [];
+  { const [y,m] = mesAlvo.split("-").map(Number);
+    for(let i=6;i>=1;i--){ const d=new Date(y, m-1-i, 1);
+      meses.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")); } }
+  const janela = new Set(meses);
+  const grupos = new Map();
+  for(const t of (DB.tx||[])){
+    if(!t || typeof t.data!=="string") continue;
+    if(t.forma==="Cartão de Crédito") continue;    // já vem pela fatura
+    const ym = t.data.slice(0,7);
+    if(!janela.has(ym)) continue;
+    const k = _descKey(t.descricao)+"|"+t.tipo;
+    if(!k || k.length<4) continue;
+    if(!grupos.has(k)) grupos.set(k, {chave:k, descricao:t.descricao, tipo:t.tipo,
+      categoria:t.categoria, forma:t.forma, meses:new Map(), dias:[], ultimo:null});
+    const g = grupos.get(k);
+    g.meses.set(ym, t.valor);
+    g.dias.push(+t.data.slice(8,10));
+    if(!g.ultimo || t.data > g.ultimo.data) g.ultimo = t;
+  }
+  // já lançado no mês-alvo?
+  const jaNoMes = new Set();
+  for(const t of (DB.tx||[])){
+    if(!t || typeof t.data!=="string") continue;
+    if(t.data.slice(0,7)!==mesAlvo) continue;
+    jaNoMes.add(_descKey(t.descricao)+"|"+t.tipo);
+  }
+  const out = [];
+  for(const g of grupos.values()){
+    if(g.meses.size < 3) continue;             // precisa ser recorrente de fato
+    if(jaNoMes.has(g.chave)) continue;         // já lançado
+    // dia mais frequente
+    const cont = new Map();
+    for(const d of g.dias) cont.set(d,(cont.get(d)||0)+1);
+    let dia=1, melhor=0;
+    for(const [d,n] of cont) if(n>melhor){ melhor=n; dia=d; }
+    const ultimoValor = g.ultimo? g.ultimo.valor : 0;
+    const vals=[...g.meses.values()];
+    const media = vals.reduce((s,v)=>s+v,0)/vals.length;
+    const varia = Math.abs(ultimoValor-media) > media*0.1;
+    const maxDia = new Date(+mesAlvo.slice(0,4), +mesAlvo.slice(5,7), 0).getDate();
+    out.push({chave:g.chave, descricao:g.descricao, tipo:g.tipo, categoria:g.categoria,
+      forma:g.forma, n:g.meses.size, valor:ultimoValor, media, varia,
+      data:`${mesAlvo}-${String(Math.min(dia,maxDia)).padStart(2,"0")}`, marcado:true});
+  }
+  return out.sort((a,b)=> b.n-a.n || b.valor-a.valor);
+}
+function opcoesMesRec(){
+  const sel = $("recLancMes"); if(!sel) return;
+  const now = new Date();
+  const opts = [];
+  for(let i=-1;i<=1;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+    const ym = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+    opts.push(`<option value="${ym}"${i===0?" selected":""}>${ymLabel(ym)}${i===0?" (atual)":""}</option>`);
+  }
+  if(sel.dataset.built!=="1"){ sel.innerHTML = opts.join(""); sel.dataset.built="1"; }
+}
+function calcularRecLanc(){
+  const mes = $("recLancMes").value || todayISO().slice(0,7);
+  recLancLista = acharRecorrentesPendentes(mes);
+  renderRecLanc(mes);
+}
+function renderRecLanc(mes){
+  const wrap = $("recLancWrap"), vazio = $("recLancVazio");
+  const n = recLancLista.length;
+  const total = recLancLista.filter(r=>r.marcado)
+    .reduce((s,r)=>s+(r.tipo==="RECEITA"? r.valor : -r.valor),0);
+  $("recLancResumo").textContent = n ? `${n} pendente(s) · saldo ${fmtBRL0(total)}` : "nada pendente";
+  $("recLancResumo").className = "pill" + (n? "":" ok");
+  if(!n){
+    wrap.style.display="none"; vazio.style.display="";
+    vazio.innerHTML = `✅ Todos os recorrentes já estão lançados em ${ymLabel(mes)}.`;
+    $("recLancAdd").disabled = true;
+    return;
+  }
+  vazio.style.display="none"; wrap.style.display="";
+  const optCat = (tipo,cat) => (tipo==="RECEITA"?RCATS:DCATS).map(c=>`<option value="${c}"${c===cat?" selected":""}>${c}</option>`).join("");
+  $("tblRecLanc").innerHTML =
+    `<thead><tr><th style="width:34px"><input type="checkbox" id="recLancAll" checked></th><th>Descrição</th><th>Tipo</th><th>Categoria</th><th>Data</th><th class="num">Valor</th><th>Frequência</th></tr></thead><tbody>`+
+    recLancLista.map((r,i)=>`<tr>
+      <td><input type="checkbox" data-rl="${i}"${r.marcado?" checked":""}></td>
+      <td>${r.descricao||"(sem descrição)"}</td>
+      <td><span class="tag ${r.tipo==="RECEITA"?"rec":"des"}">${r.tipo}</span></td>
+      <td><select data-rlcat="${i}">${optCat(r.tipo,r.categoria)}</select></td>
+      <td><input type="date" data-rldata="${i}" value="${r.data}" style="width:140px"></td>
+      <td class="num"><input type="number" step="0.01" data-rlval="${i}" value="${r.valor.toFixed(2)}" style="width:110px;text-align:right">
+        ${r.varia? `<div class="muted" style="font-size:.68rem;margin-top:2px" title="O valor varia entre os meses">média ${fmtBRL0(r.media)}</div>`:""}</td>
+      <td class="muted" style="font-size:.75rem">${r.n}/6 meses</td>
+    </tr>`).join("")+`</tbody>`;
+  $("recLancAdd").disabled = !recLancLista.some(r=>r.marcado);
+}
+async function lancarRecorrentes(){
+  const alvo = recLancLista.filter(r=>r.marcado);
+  if(!alvo.length) return toast("Nada selecionado.");
+  if(!confirm(`Criar ${alvo.length} lançamento(s)?`)) return;
+  const btn = $("recLancAdd"); btn.disabled=true; btn.textContent="Lançando…";
+  let ok=0, falhas=0;
+  for(const r of alvo){
+    try{
+      await DB.addTx({data:r.data, tipo:r.tipo, categoria:r.categoria,
+        descricao:r.descricao, valor:+r.valor, forma:r.forma||"Pix", cartao:null});
+      ok++;
+    }catch(e){ falhas++; console.error("falha ao lançar", r.descricao, e); }
+  }
+  btn.textContent="Lançar selecionados";
+  toast(`${ok} lançamento(s) criado(s)${falhas?` · ${falhas} falha(s)`:""}.`);
+  calcularRecLanc();
+  renderAll();
+}
+
+/* ================= DUPLICATAS DE CARTÃO ================= */
+let dupGrupos = [];   // [{chave, itens:[{...compra, marcado}]}]
+function acharDuplicatas(){
+  const m = new Map();
+  for(const c of (DB.cc||[])){
+    if(!c || !c.id) continue;
+    // chave: data (ou mês), valor com 2 casas, descrição normalizada, cartão e parcela.
+    // incluir a parcela evita agrupar 2/6 com 3/6, que são cobranças legítimas distintas.
+    const dia = (typeof c.data==="string" && /^\d{4}-\d{2}-\d{2}/.test(c.data)) ? c.data.slice(0,10) : ("mes:"+(c.mes||"?"));
+    const k = [dia, (+c.valor||0).toFixed(2), _descKey(c.descricao), _nk(c.cartao||""), c.parcela??"-", c.parcelas??"-"].join("|");
+    if(!m.has(k)) m.set(k, []);
+    m.get(k).push(c);
+  }
+  dupGrupos = [...m.entries()]
+    .filter(([,itens])=>itens.length>1)
+    .map(([chave,itens])=>({
+      chave,
+      itens: itens
+        .slice()
+        .sort((a,b)=> String(a.id)<String(b.id)? -1 : 1)
+        .map((c,i)=>({...c, marcado: i>0}))   // mantém a primeira, marca as repetidas
+    }))
+    .sort((a,b)=> (b.itens.length*Math.abs(b.itens[0].valor||0)) - (a.itens.length*Math.abs(a.itens[0].valor||0)));
+  renderDuplicatas();
+}
+function renderDuplicatas(){
+  const wrap = $("dupWrap"), vazio = $("dupVazio");
+  const nGrupos = dupGrupos.length;
+  const nExtras = dupGrupos.reduce((s,g)=>s+g.itens.length-1,0);
+  const valorExtra = dupGrupos.reduce((s,g)=>s+(g.itens.length-1)*(+g.itens[0].valor||0),0);
+
+  $("dupResumo").textContent = nGrupos
+    ? `${nGrupos} grupo(s) · ${nExtras} cópia(s) extra(s) · ${fmtBRL0(valorExtra)} em excesso`
+    : "nenhuma duplicata encontrada";
+  $("dupResumo").className = "pill" + (nGrupos? " err":" ok");
+
+  if(!nGrupos){
+    wrap.style.display="none"; vazio.style.display="";
+    vazio.innerHTML = "✅ Nenhuma compra duplicada no histórico.";
+    $("dupExcluir").disabled = true;
+    return;
+  }
+  vazio.style.display="none"; wrap.style.display="";
+  let html = `<thead><tr><th style="width:34px"><input type="checkbox" id="dupAll" checked></th><th>Descrição</th><th>Data</th><th>Cartão</th><th>Parcela</th><th class="num">Valor</th><th></th></tr></thead><tbody>`;
+  dupGrupos.forEach((g,gi)=>{
+    html += `<tr><td colspan="7" style="background:var(--panel2);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);padding:6px 10px">
+      Grupo ${gi+1} · ${g.itens.length} cópias · ${fmtBRL(g.itens[0].valor||0)} cada</td></tr>`;
+    g.itens.forEach((c,i)=>{
+      html += `<tr>
+        <td><input type="checkbox" data-dup="${gi}:${i}"${c.marcado?" checked":""}></td>
+        <td>${c.descricao||'<span class="muted">(sem descrição)</span>'}</td>
+        <td>${c.data? String(c.data).slice(0,10).split("-").reverse().join("/") : ymLabel(c.mes)}</td>
+        <td>${c.cartao||'<span class="muted">—</span>'}</td>
+        <td>${c.parcela? `${c.parcela}/${c.parcelas}` : '<span class="muted">—</span>'}</td>
+        <td class="num neg">${fmtBRL(c.valor||0)}</td>
+        <td>${i===0? '<span class="tag rec">manter</span>' : '<span class="tag des">repetida</span>'}</td>
+      </tr>`;
+    });
+  });
+  $("tblDup").innerHTML = html + "</tbody>";
+  $("dupExcluir").disabled = !dupGrupos.some(g=>g.itens.some(c=>c.marcado));
+}
+async function excluirDuplicatas(){
+  const alvo = [];
+  dupGrupos.forEach(g=>g.itens.forEach(c=>{ if(c.marcado) alvo.push(c); }));
+  if(!alvo.length) return toast("Nada selecionado.");
+  // trava de segurança: não deixar apagar um grupo inteiro
+  const porGrupo = dupGrupos.filter(g=>g.itens.every(c=>c.marcado));
+  if(porGrupo.length){
+    if(!confirm(`Atenção: em ${porGrupo.length} grupo(s) você marcou TODAS as cópias, o que apagaria a compra por completo.\n\nContinuar mesmo assim?`)) return;
+  }
+  const total = alvo.reduce((s,c)=>s+(+c.valor||0),0);
+  if(!confirm(`Excluir ${alvo.length} compra(s) duplicada(s), somando ${fmtBRL(total)}?`)) return;
+  const btn = $("dupExcluir"); btn.disabled = true; btn.textContent = "Excluindo…";
+  let ok=0, falhas=0;
+  for(const c of alvo){
+    try{ await DB.delCC(c.id); ok++; }
+    catch(e){ falhas++; console.error("falha ao excluir", c.id, e); }
+  }
+  btn.textContent = "Excluir selecionadas";
+  toast(`${ok} excluída(s)${falhas?` · ${falhas} falha(s)`:""}.`);
+  acharDuplicatas();
+  renderAll();
+}
+
 /* ================= SUGESTÃO DE CATEGORIAS ================= */
 /** Palavras-chave → categoria (fallback quando o histórico não ajuda).
  *  Termos são casados com limite de palavra, então "99app" não casa dentro de "1999".
@@ -4271,6 +4628,47 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("recRange").onchange = e => { recRangeMeses = +e.target.value || 12; renderRecorrentes(); };
 
   // sugestão de categorias
+  // relatório mensal
+  $("relBtn").onclick = gerarRelatorio;
+  $("relClose").onclick = ()=>{ $("relOverlay").hidden = true; };
+  $("relPrint").onclick = ()=> window.print();
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("relOverlay").hidden) $("relOverlay").hidden = true; });
+
+  opcoesMesRec();
+  $("recLancMes").onchange = calcularRecLanc;
+  $("recLancCalc").onclick = calcularRecLanc;
+  $("recLancAdd").onclick = lancarRecorrentes;
+  $("tblRecLanc").addEventListener("change", e=>{
+    const t=e.target;
+    if(t.id==="recLancAll"){
+      recLancLista.forEach(r=>r.marcado=t.checked);
+      $("tblRecLanc").querySelectorAll("input[data-rl]").forEach(el=>el.checked=t.checked);
+    } else if(t.dataset.rl!==undefined) recLancLista[+t.dataset.rl].marcado = t.checked;
+    else if(t.dataset.rlcat!==undefined) recLancLista[+t.dataset.rlcat].categoria = t.value;
+    else if(t.dataset.rldata!==undefined) recLancLista[+t.dataset.rldata].data = t.value;
+    else if(t.dataset.rlval!==undefined) recLancLista[+t.dataset.rlval].valor = parseFloat(t.value)||0;
+    const tot = recLancLista.filter(r=>r.marcado).reduce((s,r)=>s+(r.tipo==="RECEITA"?r.valor:-r.valor),0);
+    $("recLancResumo").textContent = `${recLancLista.length} pendente(s) · saldo ${fmtBRL0(tot)}`;
+    $("recLancAdd").disabled = !recLancLista.some(r=>r.marcado);
+  });
+
+  $("dupCalc").onclick = acharDuplicatas;
+  $("dupExcluir").onclick = excluirDuplicatas;
+  $("tblDup").addEventListener("change", e=>{
+    const t=e.target;
+    if(t.id==="dupAll"){
+      dupGrupos.forEach(g=>g.itens.forEach((c,i)=>c.marcado = t.checked ? i>0 : false));
+      renderDuplicatas();
+      const el=$("dupAll"); if(el) el.checked=t.checked;
+      return;
+    }
+    if(t.dataset.dup!==undefined){
+      const [gi,i]=t.dataset.dup.split(":").map(Number);
+      dupGrupos[gi].itens[i].marcado = t.checked;
+      $("dupExcluir").disabled = !dupGrupos.some(g=>g.itens.some(c=>c.marcado));
+    }
+  });
+
   $("catSugCalc").onclick = calcularSugestoes;
   $("catSugAplicar").onclick = aplicarSugestoes;
   $("tblCatSug").addEventListener("change", e=>{
