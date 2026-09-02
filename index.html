@@ -1096,11 +1096,21 @@ function addCartao(nome){
 }
 function cartaoOpts(sel){ return cartoesAll().map(c=>`<option ${c===sel?"selected":""}>${c}</option>`).join("") + `<option value="__novo__">+ Novo cartão…</option>`; }
 function formaOpts(sel){ return `<option value="">—</option>`+FORMAS.map(f=>`<option ${f===sel?"selected":""}>${f}</option>`).join(""); }
+/* Ordem também define o empilhamento do gráfico de evolução — classes de cor
+   parecida (dourado × amarelo) ficam separadas de propósito para não confundir. */
 const PAT_CLASSES = [
-  ["rf","Renda Fixa","#3D5A80"],["acoes","Ações BR","#177E51"],["fiis","FIIs","#7D6B9E"],
-  ["cripto","Cripto","#B26A12"],["etfs","ETFs","#4E8A99"],["stocks","Stocks US","#8A6A16"],
-  ["fundos","Fundos","#B06A85"],["fiagro","FIAGRO","#6C8A3A"],["fip","FIP","#8B5E83"],
-  ["fiinfra","FI-Infra","#5E9E8A"],["re","Reserva de Emergência","#8C6250"]
+  ["rf","Renda Fixa","#E07B1F"],          // laranja
+  ["acoes","Ações BR","#2A4C7D"],         // azul marinho
+  ["etfs","ETFs","#EBC934"],              // amarelo
+  ["fiis","FIIs","#7A4FA3"],              // roxo
+  ["cripto","Cripto","#D4A017"],          // dourado
+  ["stocks","Stocks US","#7B2233"],       // vinho/bordô
+  ["fundos","Fundos","#5FBF7C"],          // verde claro
+  ["fiagro","FIAGRO","#8A9A1E"],          // verde oliva
+  ["fip","FIP","#6FB3E0"],                // azul claro
+  ["fiinfra","FI-Infra","#0E7C86"],       // ciano escuro
+  ["dolares","Dólares","#A8AFB5"],        // prata
+  ["re","Reserva de Emergência","#1F5E3D"] // verde escuro
 ];
 
 /* ================= data layer ================= */
@@ -2167,14 +2177,14 @@ function renderPat(){
   renderBtcExpo(total, btcVal);
 
   const labels = p.map(r=>ymLabel(r.mes));
-  mkChart("chPat",{type:"line",data:{labels,datasets:PAT_CLASSES.map(([k,n,col])=>({label:n,data:p.map(r=>r[k]||0),borderColor:col,backgroundColor:col+"55",fill:true,pointRadius:0,borderWidth:1,tension:.25}))},
+  mkChart("chPat",{type:"line",data:{labels,datasets:PAT_CLASSES.map(([k,n,col])=>({label:n,data:p.map(r=>r[k]||0),borderColor:col,backgroundColor:col+"D9",fill:true,pointRadius:0,borderWidth:.8,tension:.2}))},
     options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
       scales:{x:{stacked:true,grid:{display:false},ticks:{maxTicksLimit:12}},y:{stacked:true,ticks:{callback:moneyTick}}},
       plugins:{legend:{position:"bottom",labels:{boxWidth:9,font:{size:9}}},tooltip:{callbacks:{label:ttMoney}}}}});
 
   const alloc = PAT_CLASSES.map(([k,n,col])=>[n,last[k]||0,col]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
   $("patAlocHint").textContent = "Fechamento de "+ymLabel(last.mes);
-  mkChart("chAloc",{type:"doughnut",data:{labels:alloc.map(a=>a[0]),datasets:[{data:alloc.map(a=>a[1]),backgroundColor:alloc.map(a=>a[2]),borderColor:"#FFFFFF",borderWidth:2}]},
+  mkChart("chAloc",{type:"doughnut",data:{labels:alloc.map(a=>a[0]),datasets:[{data:alloc.map(a=>a[1]),backgroundColor:alloc.map(a=>a[2]),borderColor:getComputedStyle(document.documentElement).getPropertyValue("--panel").trim()||"#FFFFFF",borderWidth:2}]},
     options:{maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"right",labels:{boxWidth:9,font:{size:10}}},tooltip:{callbacks:{label:c=>` ${c.label}: ${fmtBRL0(c.parsed)} (${fmtPct(c.parsed/total)})`}}}}});
 
   const rp = p.filter(r=>r.rentabilidade!=null).slice(-36);
@@ -2252,7 +2262,15 @@ async function onAddPat(){
   if(Object.keys(reDet).length) row.re_detalhe = reDet;
   const r = $("pRent").value; row.rentabilidade = r===""?null:(+r)/100;
   row.patrimonio = PAT_CLASSES.reduce((s,[k])=>s+row[k],0);
-  try{ await DB.addPat(row); toast("Fechamento registrado."); renderAll(); }catch(e){ toast("Erro: "+e.message); }
+  try{ await DB.addPat(row); toast("Fechamento registrado."); renderAll(); }
+  catch(e){
+    const msg = String(e.message||e);
+    // a classe "Dólares" é nova; se a migração ainda não foi rodada, o Supabase
+    // devolve erro de coluna inexistente — explica em vez de mostrar o erro cru
+    if(/dolares/i.test(msg) && /column|coluna|schema/i.test(msg)){
+      toast("A coluna 'dolares' ainda não existe no banco. Rode supabase/migracao_dolares.sql no SQL Editor.");
+    } else toast("Erro: "+msg);
+  }
 }
 
 /* ================= BITCOIN ================= */
