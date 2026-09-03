@@ -795,6 +795,11 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
       <h4 style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Vendas detalhadas · apuração FIFO</h4>
       <div class="twrap" style="max-height:340px;overflow-y:auto"><table id="tblIrVendas"></table></div>
     </div>
+    <div class="card2 mt" id="irPerdasBox" style="display:none">
+      <h4 style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Baixas por perda · não são alienação</h4>
+      <div class="twrap"><table id="tblIrPerdas"></table></div>
+      <p class="note mt">Estas baixas <b>não</b> entram no ganho de capital nem no limite mensal de isenção — você não vendeu, perdeu o ativo. Na declaração, o caminho usual é dar baixa do bem na ficha de Bens e Direitos explicando a ocorrência na discriminação, em vez de lançar como venda. Confirme o tratamento com seu contador e guarde a documentação (boletim de ocorrência, comunicação à exchange, hashes das transações).</p>
+    </div>
     <div class="card2 mt">
       <h4 style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Bens e direitos · posição em 31/12</h4>
       <div class="twrap"><table id="tblIrBens"></table></div>
@@ -845,14 +850,14 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
     <div class="card">
       <h3>Nova ordem</h3>
       <div class="form">
-        <div class="f"><label>Operação</label><select id="bOp"><option value="compra">Compra</option><option value="venda">Venda</option></select></div>
+        <div class="f"><label>Operação</label><select id="bOp"><option value="compra">Compra</option><option value="venda">Venda</option><option value="perda">Perda / roubo</option></select></div>
         <div class="f"><label>Data</label><input type="date" id="bData"></div>
         <div class="f"><label>Quantidade BTC</label><input type="number" id="bQty" step="0.00000001" min="0" placeholder="0,00000000"></div>
         <div class="f"><label>Total (R$)</label><input type="number" id="bTotal" step="0.01" min="0" placeholder="0,00"></div>
-        <div class="f wide"><label>Corretora</label><input type="text" id="bBroker" placeholder="Ex.: Binance"></div>
+        <div class="f wide"><label id="bBrokerLbl">Corretora</label><input type="text" id="bBroker" placeholder="Ex.: Binance"></div>
         <div class="f"><label>&nbsp;</label><button class="btn pri" id="bAdd">Registrar</button></div>
       </div>
-      <p class="note mt">O preço unitário é calculado automaticamente (total ÷ quantidade).</p>
+      <p class="note mt" id="bNota">O preço unitário é calculado automaticamente (total ÷ quantidade).</p>
     </div>
   </div>
   <div class="card">
@@ -1299,20 +1304,44 @@ function catAgg(tipo, filterFn){
   for(const t of allTx()){ if(t.tipo!==tipo) continue; if(filterFn && !filterFn(t)) continue; m.set(t.categoria,(m.get(t.categoria)||0)+t.valor); }
   return [...m.entries()].sort((a,b)=>b[1]-a[1]);
 }
+/* Tipos de operação: "compra", "venda" e "perda" (baixa por roubo/perda de acesso).
+   A perda reduz quantidade e custo por FIFO, igual a uma venda, mas NÃO é
+   alienação: não entra na apuração de ganho de capital nem no limite de isenção. */
+const isCompra = b => b && b.operacao==="compra";
+const isPerda  = b => b && b.operacao==="perda";
+const OP_LABEL = {compra:"COMPRA", venda:"VENDA", perda:"PERDA"};
+
 function btcStats(){
-  let qty=0, invested=0, redeemed=0, soldQty=0, costOfHeld=0;
-  const points=[]; // {data, cumQty, avg, price, op, total}
+  // Custo apurado por FIFO — mesmo critério das safras, do IR e da série de valor.
+  // Antes esta função usava custo médio, o que fazia o custo da posição divergir
+  // entre telas para quem tinha vendas ou baixas no histórico.
+  let invested=0, redeemed=0, soldQty=0, perdaQty=0, perdaCusto=0;
+  const lotes=[];   // fila FIFO {qty, custo}
+  const points=[];  // {data, cumQty, avg, price, op, total}
+  const somaLotes = () => lotes.reduce((a,l)=>[a[0]+l.qty, a[1]+l.custo], [0,0]);
   for(const b of DB.btc){
-    if(b.operacao==="compra"){ qty+=b.quantidade; invested+=(b.total||0); costOfHeld+=(b.total||0); }
-    else { // average-cost method on sale
-      const avg = qty>0 ? costOfHeld/qty : 0;
-      costOfHeld -= avg*b.quantidade;
-      qty-=b.quantidade; soldQty+=b.quantidade; redeemed+=(b.total||0);
+    if(isCompra(b)){
+      const q=+b.quantidade||0, c=+b.total||0;
+      if(q>1e-12) lotes.push({qty:q, custo:c});
+      invested += c;
+    } else {
+      let resta=+b.quantidade||0, custoBaixado=0;
+      while(resta>1e-12 && lotes.length){
+        const l=lotes[0];
+        const usa=Math.min(l.qty, resta);
+        const c=l.qty>0 ? l.custo*(usa/l.qty) : 0;
+        custoBaixado+=c; l.qty-=usa; l.custo-=c; resta-=usa;
+        if(l.qty<=1e-12) lotes.shift();
+      }
+      if(isPerda(b)){ perdaQty+=(+b.quantidade||0); perdaCusto+=custoBaixado; }
+      else { soldQty+=(+b.quantidade||0); redeemed+=(b.total||0); }
     }
-    points.push({data:b.data, cumQty:qty, avg: qty>1e-9?costOfHeld/qty:null, price:b.preco, op:b.operacao, total:b.total});
+    const [q,c] = somaLotes();
+    points.push({data:b.data, cumQty:q, avg: q>1e-9?c/q:null, price:b.preco, op:b.operacao, total:b.total});
   }
+  const [qty, costOfHeld] = somaLotes();
   const avgCost = qty>1e-9 ? costOfHeld/qty : null;
-  return {qty, invested, redeemed, avgCost, costOfHeld, points};
+  return {qty, invested, redeemed, avgCost, costOfHeld, points, perdaQty, perdaCusto, soldQty};
 }
 
 /**
@@ -1331,7 +1360,7 @@ function btcSafras(period){
     .filter(b => b && typeof b.data==="string" && /^\d{4}-\d{2}-\d{2}/.test(b.data))
     .sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
   for(const b of ops){
-    if(b.operacao==="compra"){
+    if(isCompra(b)){
       const q = +b.quantidade || 0;
       const c = +b.total || 0;
       if(q>1e-12) lotes.push({data:b.data, qtyOrig:q, custoOrig:c, qtyRem:q, custoRem:c});
@@ -2317,7 +2346,7 @@ function btcSerieValor(){
   for(const ym of meses){
     while(iOp < ops.length && ops[iOp].data.slice(0,7) <= ym){
       const b = ops[iOp];
-      if(b.operacao==="compra"){
+      if(isCompra(b)){
         lotes.push({qty:+b.quantidade, custo:+b.total||0});
       } else {
         let resta = +b.quantidade;
@@ -2483,7 +2512,8 @@ function renderBtc(){
 
   // aportes mensais
   const apo = new Map();
-  for(const b of DB.btc){ const ym=b.data.slice(0,7); apo.set(ym,(apo.get(ym)||0)+(b.operacao==="compra"?(b.total||0):-(b.total||0))); }
+  for(const b of DB.btc){ if(isPerda(b)) continue;   // perda não movimenta caixa
+    const ym=b.data.slice(0,7); apo.set(ym,(apo.get(ym)||0)+(isCompra(b)?(b.total||0):-(b.total||0))); }
   const apoRows = [...apo.entries()].sort();
   mkChart("chBtcApo",{type:"bar",data:{labels:apoRows.map(r=>ymLabel(r[0])),datasets:[{label:"Aporte líquido",data:apoRows.map(r=>r[1]),backgroundColor:apoRows.map(r=>r[1]>=0?"rgba(178,106,18,.75)":"rgba(192,57,75,.68)"),borderRadius:2}]},
     options:{maintainAspectRatio:false,scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{ticks:{callback:moneyTick}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ttMoney}}}}});
@@ -2497,7 +2527,7 @@ function renderBtc(){
 
   const rows = [...DB.btc].reverse();
   $("tblBtc").innerHTML = `<thead><tr><th>Data</th><th>Op.</th><th>Corretora</th><th class="num">Qtde ₿</th><th class="num">Preço</th><th class="num">Total</th><th></th></tr></thead><tbody>`+
-    rows.map(b=>`<tr><td>${b.data.split("-").reverse().join("/")}</td><td><span class="tag ${b.operacao==="compra"?"rec":"des"}">${b.operacao.toUpperCase()}</span></td><td>${b.corretora||""}</td><td class="num btcc">${fmtBtc(b.quantidade)}</td><td class="num">${fmtBRL0(b.preco)}</td><td class="num">${fmtBRL(b.total)}</td><td><button class="del" data-delbtc="${b.id}">✕</button></td></tr>`).join("")+"</tbody>";
+    rows.map(b=>`<tr><td>${b.data.split("-").reverse().join("/")}</td><td><span class="tag ${isCompra(b)?"rec":"des"}"${isPerda(b)?' style="background:#7B2233;color:#fff;border-color:#7B2233" title="Baixa por perda — não é alienação"':''}>${OP_LABEL[b.operacao]||String(b.operacao||"").toUpperCase()}</span></td><td>${b.corretora||""}</td><td class="num btcc">${fmtBtc(b.quantidade)}</td><td class="num">${fmtBRL0(b.preco)}</td><td class="num">${fmtBRL(b.total)}</td><td><button class="del" data-delbtc="${b.id}">✕</button></td></tr>`).join("")+"</tbody>";
 }
 function renderBtcSafras(px){
   const safras = btcSafras(btcSafraGroup);
@@ -4036,6 +4066,7 @@ const IR_ALIQUOTA = 0.15;          // primeira faixa de ganho de capital
 function btcApuracao(){
   const lotes = [];   // fila FIFO {data, qty, custo}
   const vendas = [];
+  const perdas = [];   // baixas por roubo/perda — não são alienação
   const ops = (DB.btc||[])
     .filter(b => b && typeof b.data==="string" && /^\d{4}-\d{2}-\d{2}/.test(b.data))
     .sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
@@ -4052,13 +4083,13 @@ function btcApuracao(){
     const anoOp = b.data.slice(0,4);
     // fecha snapshots de anos anteriores a esta operação
     while(iAno < anos.length && anos[iAno] < anoOp){ snapshot(anos[iAno]); iAno++; }
-    if(b.operacao==="compra"){
+    if(isCompra(b)){
       const q = +b.quantidade||0, c = +b.total||0;
       if(q>1e-12) lotes.push({data:b.data, qty:q, custo:c});
     } else {
       let restante = +b.quantidade||0;
-      const total = +b.total||0;
-      const qVenda = restante;
+      const total = isPerda(b) ? 0 : (+b.total||0);   // perda não gera receita
+      const qBaixa = restante;
       let custoConsumido = 0;
       const usados = [];
       while(restante>1e-12 && lotes.length){
@@ -4070,11 +4101,19 @@ function btcApuracao(){
         l.qty -= consumir; l.custo -= custoParte; restante -= consumir;
         if(l.qty<=1e-12) lotes.shift();
       }
-      const ganho = total - custoConsumido;
-      vendas.push({data:b.data, ym:b.data.slice(0,7), ano:anoOp, qty:qVenda,
-        total, custo:custoConsumido, ganho, precoVenda: qVenda>0? total/qVenda : null,
-        precoMedioCusto: qVenda>0? custoConsumido/qVenda : null, lotes:usados,
-        corretora:b.corretora||null});
+      if(isPerda(b)){
+        // baixa por perda: sai do estoque e do custo, mas não é alienação —
+        // fica fora de `vendas` para não entrar no ganho de capital nem no limite
+        perdas.push({data:b.data, ym:b.data.slice(0,7), ano:anoOp, qty:qBaixa,
+          custo:custoConsumido, lotes:usados, corretora:b.corretora||null,
+          obs:(b.corretora||"").trim()});
+      } else {
+        const ganho = total - custoConsumido;
+        vendas.push({data:b.data, ym:b.data.slice(0,7), ano:anoOp, qty:qBaixa,
+          total, custo:custoConsumido, ganho, precoVenda: qBaixa>0? total/qBaixa : null,
+          precoMedioCusto: qBaixa>0? custoConsumido/qBaixa : null, lotes:usados,
+          corretora:b.corretora||null});
+      }
     }
   }
   while(iAno < anos.length){ snapshot(anos[iAno]); iAno++; }
@@ -4092,7 +4131,7 @@ function btcApuracao(){
     m.isento = m.alienado <= IR_LIMITE_ISENCAO;
     m.imposto = (!m.isento && m.ganho>0) ? m.ganho*IR_ALIQUOTA : 0;
   }
-  return {vendas, meses:[...porMes.values()].sort((a,b)=>a.ym<b.ym?-1:1), bens,
+  return {vendas, perdas, meses:[...porMes.values()].sort((a,b)=>a.ym<b.ym?-1:1), bens,
           posicaoAtual:{qty:qAtual, custo:cAtual}};
 }
 let irAnoSel = "todos";
@@ -4127,7 +4166,8 @@ function renderBtcIR(){
     <div class="kpi"><div class="l">Total alienado</div><div class="v">${fmtBRL0(totAlienado)}</div><div class="s">${irAnoSel==="todos"?"todo o histórico":"em "+irAnoSel}</div></div>
     <div class="kpi"><div class="l">Ganho de capital</div><div class="v ${totGanho>=0?'pos':'neg'}">${fmtBRL0(totGanho)}</div><div class="s">apurado por FIFO</div></div>
     <div class="kpi"><div class="l">Imposto estimado</div><div class="v ${totImposto>0?'neg':''}">${fmtBRL0(totImposto)}</div><div class="s">${totImposto>0?`15% sobre ganho de ${mesesTributaveis} mês(es)`:"tudo dentro da isenção"}</div></div>
-    <div class="kpi"><div class="l">Posição atual</div><div class="v btc">${fmtBtc(ap.posicaoAtual.qty)}</div><div class="s">custo ${fmtBRL0(ap.posicaoAtual.custo)}</div></div>`;
+    <div class="kpi"><div class="l">Posição atual</div><div class="v btc">${fmtBtc(ap.posicaoAtual.qty)}</div><div class="s">custo ${fmtBRL0(ap.posicaoAtual.custo)}</div></div>
+    ${ap.perdas.filter(filtro).length? `<div class="kpi"><div class="l">Baixas por perda</div><div class="v neg">${fmtBtc(ap.perdas.filter(filtro).reduce((s,p)=>s+p.qty,0))}</div><div class="s">custo baixado ${fmtBRL0(ap.perdas.filter(filtro).reduce((s,p)=>s+p.custo,0))} · fora do ganho de capital</div></div>`:""}`;
 
   // tabela mensal (limite de isenção)
   if(!meses.length){
@@ -4171,6 +4211,25 @@ function renderBtcIR(){
         <td class="muted" style="font-size:.72rem">${v.lotes.map(l=>`${l.data.slice(0,7)}: ${fmtBtc(l.qty)}`).join(" · ")||"—"}</td>
       </tr>`).join("")+`</tbody>`;
   }
+
+  // baixas por perda
+  const perdas = ap.perdas.filter(filtro);
+  if(perdas.length){
+    $("irPerdasBox").style.display = "";
+    const totQ = perdas.reduce((s,p)=>s+p.qty,0);
+    const totC = perdas.reduce((s,p)=>s+p.custo,0);
+    $("tblIrPerdas").innerHTML =
+      `<thead><tr><th>Data</th><th class="num">Qtde ₿</th><th class="num">Custo baixado (FIFO)</th><th class="num">Custo médio</th><th>Lotes consumidos</th><th>Observação</th></tr></thead><tbody>`+
+      perdas.map(p=>`<tr>
+        <td>${p.data.split("-").reverse().join("/")}</td>
+        <td class="num btcc">${fmtBtc(p.qty)}</td>
+        <td class="num neg">${fmtBRL0(p.custo)}</td>
+        <td class="num">${p.qty>0?fmtBRL0(p.custo/p.qty):"—"}</td>
+        <td class="muted" style="font-size:.72rem">${p.lotes.map(l=>`${l.data.slice(0,7)}: ${fmtBtc(l.qty)}`).join(" · ")||"—"}</td>
+        <td class="muted" style="font-size:.75rem">${p.obs||"—"}</td>
+      </tr>`).join("")+
+      `</tbody><tfoot><tr><td><b>Total</b></td><td class="num btcc"><b>${fmtBtc(totQ)}</b></td><td class="num neg"><b>${fmtBRL0(totC)}</b></td><td></td><td></td><td></td></tr></tfoot>`;
+  } else $("irPerdasBox").style.display = "none";
 
   // bens e direitos
   const bens = ap.bens.filter(b => irAnoSel==="todos" || b.ano===irAnoSel);
@@ -4819,14 +4878,44 @@ document.addEventListener("DOMContentLoaded", ()=>{
     $("btcSafraGroup").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
     renderBtcSafras(getBtcPx());
   });
+  // a perda não tem contrapartida em dinheiro: o campo de total vira observação
+  const ajustaFormBtc = ()=>{
+    const perda = $("bOp").value === "perda";
+    $("bTotal").disabled = perda;
+    $("bTotal").placeholder = perda ? "não se aplica" : "0,00";
+    if(perda) $("bTotal").value = "";
+    $("bBrokerLbl").textContent = perda ? "Onde estava / observação" : "Corretora";
+    $("bBroker").placeholder = perda ? "Ex.: carteira quente — roubo em 12/08" : "Ex.: Binance";
+    $("bNota").innerHTML = perda
+      ? "A baixa por perda tira a quantidade do estoque e dá baixa no custo (FIFO), mas <b>não é alienação</b>: fica fora do ganho de capital e do limite de isenção. O custo baixado aparece na aba de IR para você documentar a perda."
+      : "O preço unitário é calculado automaticamente (total ÷ quantidade).";
+  };
+  $("bOp").onchange = ajustaFormBtc;
+  ajustaFormBtc();
+
   $("bAdd").onclick = async ()=>{
+    const perda = $("bOp").value === "perda";
     const q=parseFloat($("bQty").value), t=parseFloat($("bTotal").value);
-    if(!$("bData").value||!q||!t) return toast("Preencha data, quantidade e total.");
+    if(!$("bData").value || !q) return toast("Preencha data e quantidade.");
+    if(!perda && !t) return toast("Preencha o total.");
+    if(perda){
+      const s = btcStats();
+      if(q > s.qty + 1e-9) return toast(`Você tem ${fmtBtc(s.qty)} em carteira — não é possível dar baixa de ${fmtBtc(q)}.`);
+      if(!confirm(`Registrar baixa por perda de ${fmtBtc(q)}?\n\nIsso reduz sua posição e dá baixa no custo por FIFO. Não será tratado como venda.`)) return;
+    }
     try{
-      await DB.addBtc({data:$("bData").value, operacao:$("bOp").value, quantidade:q, total:+t.toFixed(2), preco:+(t/q).toFixed(2), corretora:$("bBroker").value.trim()});
+      await DB.addBtc({data:$("bData").value, operacao:$("bOp").value, quantidade:q,
+        total: perda? 0 : +t.toFixed(2),
+        preco: perda? 0 : +(t/q).toFixed(2),
+        corretora:$("bBroker").value.trim()});
       $("bQty").value="";$("bTotal").value="";
-      toast("Ordem registrada."); renderAll();
-    }catch(e){ toast("Erro: "+(e.message||e)); }
+      toast(perda? "Baixa por perda registrada." : "Ordem registrada."); renderAll();
+    }catch(e){
+      const msg=String(e.message||e);
+      if(/operacao/i.test(msg) && /check|constraint|valid/i.test(msg))
+        toast("O banco só aceita 'compra' e 'venda'. Rode supabase/1_diagnostico_perda.sql no SQL Editor e siga a instrução que ele der.");
+      else toast("Erro: "+msg);
+    }
   };
   $("tblBtc").addEventListener("click", async e=>{
     const id=e.target.dataset?.delbtc; if(!id) return;
