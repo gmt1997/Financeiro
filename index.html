@@ -200,6 +200,8 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
 .gate-err{color:var(--neg);font-size:.8rem;margin-top:12px;min-height:1.1em}
 .gate-setup{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);font-size:.8rem}
 .gate-setup summary{color:var(--dim);cursor:pointer;list-style:none}
+.gate-hint{color:var(--muted);font-size:.76rem;line-height:1.55;margin:10px 0 12px}
+.gate-lockmsg{color:var(--muted);font-size:.76rem;margin-top:14px;text-align:center}
 .gate-setup summary::-webkit-details-marker{display:none}
 .gate-setup summary:before{content:"▸ ";color:var(--dim)}
 .gate-setup[open] summary:before{content:"▾ "}
@@ -317,17 +319,38 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
   <div class="gate-card">
     <div class="gate-brand">Financeiro</div>
     <p class="gate-sub" id="gateSub">Acesso restrito · entre para continuar</p>
-    <div class="gate-form">
+
+    <!-- modo 1: cofre existe, pede só a palavra-chave -->
+    <div class="gate-form" id="gVaultForm" style="display:none">
+      <input type="password" id="gPhrase" placeholder="Palavra-chave" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="btn pri" id="gUnlock">Desbloquear</button>
+    </div>
+
+    <!-- modo 2: login direto (sem cofre configurado) -->
+    <div class="gate-form" id="gLoginForm">
       <input type="email" id="gEmail" placeholder="E-mail" autocomplete="username">
       <input type="password" id="gPass" placeholder="Senha" autocomplete="current-password">
       <button class="btn pri" id="gLogin">Entrar</button>
     </div>
+
     <p class="gate-err" id="gErr"></p>
+
     <details id="gSetup" class="gate-setup">
       <summary>Configurar conexão (primeiro acesso)</summary>
       <input type="text" id="gUrl" placeholder="Project URL (https://xxx.supabase.co)">
       <input type="password" id="gKey" placeholder="Publishable key (sb_publishable_…)">
       <button class="btn" id="gSave">Salvar conexão</button>
+    </details>
+
+    <details id="gVaultSetup" class="gate-setup">
+      <summary id="gVaultSummary">Proteger com palavra-chave</summary>
+      <p class="gate-hint">A palavra-chave criptografa suas credenciais neste aparelho. Sem ela o app não consegue nem se conectar ao banco — não existe forma de contornar pela tela. <b>Se você esquecê-la, será preciso reconfigurar a conexão do zero.</b></p>
+      <input type="email" id="gvEmail" placeholder="E-mail do Supabase" autocomplete="username">
+      <input type="password" id="gvPass" placeholder="Senha do Supabase" autocomplete="current-password">
+      <input type="password" id="gvPhrase1" placeholder="Crie a palavra-chave" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <input type="password" id="gvPhrase2" placeholder="Repita a palavra-chave" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="btn pri" id="gvSave">Ativar proteção</button>
+      <button class="btn" id="gvRemove" style="display:none;margin-top:6px">Remover proteção e apagar cofre</button>
     </details>
   </div>
 </div>
@@ -987,6 +1010,20 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
       <div class="f"><label>Redução sobre a média (%)</label><input type="number" id="cfgMetaPct" min="1" max="50" step="0.5" style="width:100px"></div>
       <div class="f"><label>&nbsp;</label><button class="btn" id="cfgMetaSave">Salvar</button></div>
     </div>
+  </div>
+  <div class="card">
+    <h3>Segurança e bloqueio</h3>
+    <div class="hint">A palavra-chave criptografa as credenciais de acesso neste aparelho (AES-GCM com chave derivada por PBKDF2). Sem ela o app não consegue abrir conexão com o banco. O bloqueio automático encerra a sessão após um período sem uso.</div>
+    <div class="form">
+      <div class="f"><label>Bloquear após (minutos)</label><input type="number" id="cfgLockMin" min="0" max="240" step="1" style="width:110px"></div>
+      <div class="f"><label>&nbsp;</label><button class="btn" id="cfgLockSave">Salvar</button></div>
+      <div class="f"><label>&nbsp;</label><button class="btn" id="cfgLockNow">Bloquear agora</button></div>
+    </div>
+    <p class="note mt" id="cfgVaultStatus"></p>
+    <div class="bar mt">
+      <button class="btn" id="cfgVaultRemove" style="display:none">Remover proteção</button>
+    </div>
+    <p class="note mt">Use <b>0 minutos</b> para desativar o bloqueio automático. Mesmo desativado, o app sempre pede a palavra-chave ao ser aberto ou recarregado.</p>
   </div>
   <div class="card">
     <h3>Meta de taxa de poupança</h3>
@@ -3036,7 +3073,7 @@ async function connectSupabase(){
   const url = $("sbUrl").value.trim().replace(/\/(rest\/v1|auth\/v1|storage\/v1)\/?.*$/, "").replace(/\/+$/, ""), key = $("sbKey").value.trim();
   if(!url || !key) return toast("Informe URL e anon key.");
   try{
-    DB.sb = window.supabase.createClient(url, key);
+    DB.sb = window.supabase.createClient(url, key, {auth:{persistSession:false, autoRefreshToken:true}});
     setConn(null,"Conectando…");
     await DB.loadSupabase();
     DB.mode = "supabase";
@@ -4935,6 +4972,28 @@ document.addEventListener("DOMContentLoaded", ()=>{
       if(isNaN(v)||v<1||v>50) return toast("Informe um valor entre 1% e 50%.");
       safeStore.set("fin_meta_desp_pct", String(v)); toast("Meta atualizada para "+v+"% abaixo da média."); renderAll(); }; }
 
+  // segurança e bloqueio
+  if($("cfgLockMin")){
+    $("cfgLockMin").value = lockMin();
+    const statusVault = ()=>{
+      const tem = vaultExists();
+      $("cfgVaultStatus").innerHTML = tem
+        ? "🔒 Proteção <b>ativa</b>: as credenciais estão criptografadas neste aparelho e a sessão não é mantida entre aberturas."
+        : "⚠ Proteção <b>não configurada</b>. Ative pela tela de bloqueio (saia e escolha “Proteger com palavra-chave”) para criptografar as credenciais.";
+      $("cfgVaultRemove").style.display = tem ? "" : "none";
+    };
+    statusVault();
+    $("cfgLockSave").onclick = ()=>{
+      const v = +$("cfgLockMin").value;
+      if(isNaN(v)||v<0||v>240) return toast("Informe entre 0 e 240 minutos.");
+      safeStore.set("fin_lock_min", String(v));
+      agendarLock();
+      toast(v===0? "Bloqueio automático desativado." : `Bloqueio automático em ${v} min.`);
+    };
+    $("cfgLockNow").onclick = ()=> travar("Bloqueado manualmente");
+    $("cfgVaultRemove").onclick = removerCofre;
+  }
+
   // meta de taxa de poupança
   if($("cfgPoupMeta")){ $("cfgPoupMeta").value = safeStore.get("fin_poup_meta") || "30";
     $("cfgPoupSave").onclick = ()=>{ const v=+$("cfgPoupMeta").value;
@@ -5048,8 +5107,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
     const email=$("sbEmail").value, pass=$("sbPass").value;
     const {error} = await DB.sb.auth.signInWithPassword({email, password:pass});
     if(error) return toast("Login falhou: "+error.message);
-    // persistir credenciais de auth para relogin automático
-    try{ const saved=JSON.parse(safeStore.get("mesafin_sb")||"{}"); saved.email=email; saved.pass=pass; safeStore.set("mesafin_sb",JSON.stringify(saved)); }catch(e){}
+    // NÃO guardamos e-mail/senha em texto puro. Para relogin automático protegido,
+    // use "Proteger com palavra-chave" na tela de bloqueio (cofre criptografado).
     toast("Login efetuado."); try{ await DB.loadSupabase(); renderAll(); }catch(e){}
   };
   $("sbLogout").onclick = async ()=>{ await doLogout(); };
@@ -5060,6 +5119,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
   // ---- eventos da tela de login ----
   $("gLogin").onclick = gateLogin;
   $("gPass").addEventListener("keydown", e=>{ if(e.key==="Enter") gateLogin(); });
+  $("gUnlock").onclick = abrirComCofre;
+  $("gPhrase").addEventListener("keydown", e=>{ if(e.key==="Enter") abrirComCofre(); });
+  $("gvSave").onclick = criarCofre;
+  $("gvRemove").onclick = removerCofre;
   $("gSave").onclick = ()=>{
     const url=$("gUrl").value.trim().replace(/\/(rest|auth|storage)\/v1\/?.*$/,"").replace(/\/+$/,"");
     const key=$("gKey").value.trim();
@@ -5085,6 +5148,150 @@ function effectiveCreds(){
 function setGateErr(m){ $("gErr").textContent=m||""; }
 function showGate(msg){ $("gate").classList.remove("hidden"); if(msg) $("gateSub").textContent=msg; }
 function hideGate(){ $("gate").classList.add("hidden"); }
+/* ================= COFRE CRIPTOGRAFADO ==================
+   As credenciais do Supabase (URL, chave, e-mail e senha) ficam guardadas
+   cifradas com AES-GCM, usando chave derivada da palavra-chave via PBKDF2.
+   Sem a palavra-chave o conteúdo é inútil: o app não consegue nem abrir
+   conexão com o banco. Isso é diferente de "esconder a tela" — não há o que
+   contornar pelo console, porque os dados sequer estão legíveis no aparelho. */
+const VAULT_KEY  = "fin_vault";
+const VAULT_ITER = 310000;          // PBKDF2-SHA256
+const LOCK_MIN_DEFAULT = 5;         // minutos de inatividade até travar
+
+const _b64 = {
+  enc: buf => btoa(String.fromCharCode(...new Uint8Array(buf))),
+  dec: str => Uint8Array.from(atob(str), c=>c.charCodeAt(0)),
+};
+async function _deriveKey(phrase, salt, iter){
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(phrase), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    {name:"PBKDF2", salt, iterations:iter, hash:"SHA-256"},
+    base, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+}
+async function vaultWrite(phrase, payload){
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv   = crypto.getRandomValues(new Uint8Array(12));
+  const key  = await _deriveKey(phrase, salt, VAULT_ITER);
+  const ct   = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(JSON.stringify(payload)));
+  safeStore.set(VAULT_KEY, JSON.stringify({v:1, iter:VAULT_ITER, salt:_b64.enc(salt), iv:_b64.enc(iv), ct:_b64.enc(ct)}));
+}
+async function vaultRead(phrase){
+  const raw = safeStore.get(VAULT_KEY);
+  if(!raw) throw new Error("sem cofre");
+  const o = JSON.parse(raw);
+  const key = await _deriveKey(phrase, _b64.dec(o.salt), o.iter||VAULT_ITER);
+  // se a palavra-chave estiver errada, o AES-GCM falha na verificação de integridade
+  const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv:_b64.dec(o.iv)}, key, _b64.dec(o.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+const vaultExists = () => !!safeStore.get(VAULT_KEY);
+
+/* Tentativas erradas: atraso progressivo, para dificultar força bruta local. */
+let _tentativas = 0;
+const _espera = () => Math.min(30000, _tentativas<3 ? 0 : 1000*Math.pow(2, _tentativas-3));
+
+/* ================= BLOQUEIO POR INATIVIDADE ================= */
+const lockMin = () => { const v=+(safeStore.get("fin_lock_min")||LOCK_MIN_DEFAULT); return isNaN(v)?LOCK_MIN_DEFAULT:v; };
+let _lockTimer = null, _oculto = null;
+function agendarLock(){
+  clearTimeout(_lockTimer);
+  const min = lockMin();
+  if(min<=0) return;                       // 0 = desativado
+  _lockTimer = setTimeout(()=>travar("Bloqueado por inatividade"), min*60000);
+}
+function travar(msg){
+  clearTimeout(_lockTimer);
+  // derruba a sessão e limpa os dados da memória
+  try{ if(DB.sb) DB.sb.auth.signOut(); }catch(e){}
+  DB.sb = null; DB.mode = "local";
+  DB.tx=[]; DB.btc=[]; DB.pat=[]; DB.cc=[]; DB.liv=[]; DB.livWl=[]; DB._vtx=[];
+  try{ Object.keys(charts).forEach(k=>{ try{charts[k].destroy();}catch(e){} delete charts[k]; }); }catch(e){}
+  const p = $("gPhrase"); if(p) p.value="";
+  montarGate(msg || "Sessão bloqueada · informe a palavra-chave");
+}
+function iniciarMonitorInatividade(){
+  ["click","keydown","touchstart","scroll"].forEach(ev=>
+    document.addEventListener(ev, ()=>{ if($("gate").classList.contains("hidden")) agendarLock(); }, {passive:true}));
+  // ao voltar para a aba depois de um tempo fora, tranca
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden){ _oculto = Date.now(); return; }
+    if(_oculto && lockMin()>0 && (Date.now()-_oculto) > lockMin()*60000
+       && !$("gate").classList.contains("hidden")===false){ travar("Bloqueado enquanto o app esteve em segundo plano"); }
+    _oculto = null;
+    if($("gate").classList.contains("hidden")) agendarLock();
+  });
+}
+
+/* ================= FLUXO DA TELA DE BLOQUEIO ================= */
+function montarGate(msg){
+  const temCofre = vaultExists();
+  $("gVaultForm").style.display = temCofre ? "" : "none";
+  $("gLoginForm").style.display = temCofre ? "none" : "";
+  $("gSetup").style.display     = temCofre ? "none" : "";
+  $("gVaultSetup").style.display = temCofre ? "none" : "";
+  $("gVaultSummary").textContent = "Proteger com palavra-chave";
+  $("gateSub").textContent = msg || (temCofre
+    ? "Protegido · informe a palavra-chave para abrir"
+    : "Acesso restrito · entre para continuar");
+  showGate();
+  setTimeout(()=>{ const el = temCofre? $("gPhrase") : $("gEmail"); if(el) el.focus(); }, 60);
+}
+async function abrirComCofre(){
+  const phrase = $("gPhrase").value;
+  if(!phrase) return setGateErr("Informe a palavra-chave.");
+  const espera = _espera();
+  if(espera){ setGateErr(`Aguarde ${Math.ceil(espera/1000)}s…`); await new Promise(r=>setTimeout(r,espera)); }
+  setGateErr("Abrindo…");
+  let cfg;
+  try{ cfg = await vaultRead(phrase); }
+  catch(e){
+    _tentativas++;
+    $("gPhrase").value="";
+    return setGateErr(`Palavra-chave incorreta.${_tentativas>=3?` (${_tentativas} tentativas)`:""}`);
+  }
+  _tentativas = 0;
+  try{
+    // persistSession:false — o token não fica guardado, então não há entrada automática
+    DB.sb = window.supabase.createClient(cfg.url, cfg.key, {auth:{persistSession:false, autoRefreshToken:true}});
+    const {error} = await DB.sb.auth.signInWithPassword({email:cfg.email, password:cfg.pass});
+    if(error) return setGateErr("Login recusado pelo servidor: "+error.message);
+    $("gPhrase").value="";
+    await unlock();
+    agendarLock();
+  }catch(e){ setGateErr("Falha ao conectar: "+(e.message||e)); }
+}
+async function criarCofre(){
+  const url = (effectiveCreds()||{}).url || $("gUrl").value.trim();
+  const key = (effectiveCreds()||{}).key || $("gKey").value.trim();
+  const email = $("gvEmail").value.trim(), pass = $("gvPass").value;
+  const p1 = $("gvPhrase1").value, p2 = $("gvPhrase2").value;
+  if(!url || !key) return setGateErr("Configure a conexão antes de ativar a proteção.");
+  if(!email || !pass) return setGateErr("Informe e-mail e senha do Supabase.");
+  if(!p1 || p1.length < 6) return setGateErr("A palavra-chave precisa ter ao menos 6 caracteres.");
+  if(p1 !== p2) return setGateErr("As palavras-chave não conferem.");
+  setGateErr("Validando credenciais…");
+  // só grava o cofre depois de confirmar que o login realmente funciona
+  try{
+    const sb = window.supabase.createClient(url, key, {auth:{persistSession:false}});
+    const {error} = await sb.auth.signInWithPassword({email, password:pass});
+    if(error) return setGateErr("Login recusado: "+error.message);
+    await sb.auth.signOut();
+  }catch(e){ return setGateErr("Falha ao validar: "+(e.message||e)); }
+  await vaultWrite(p1, {url, key, email, pass});
+  // remove qualquer resquício em texto puro
+  safeStore.del("mesafin_sb");
+  ["gvEmail","gvPass","gvPhrase1","gvPhrase2"].forEach(id=>{ const el=$(id); if(el) el.value=""; });
+  setGateErr("");
+  toast("Proteção ativada. As credenciais foram criptografadas e a cópia em texto puro foi apagada.");
+  montarGate("Protegido · informe a palavra-chave para abrir");
+}
+function removerCofre(){
+  if(!confirm("Remover a proteção apaga o cofre criptografado deste aparelho.\n\nVocê precisará reconfigurar a conexão. Continuar?")) return;
+  safeStore.del(VAULT_KEY);
+  toast("Proteção removida.");
+  location.reload();
+}
+
 async function unlock(){
   try{
     setGateErr("Carregando…");
@@ -5107,30 +5314,38 @@ async function gateLogin(){
   await unlock();
 }
 async function doLogout(){
-  try{ if(DB.sb) await DB.sb.auth.signOut(); }catch(e){}
-  // limpa estado e volta pra tela de login
-  DB.tx=[]; DB.btc=[]; DB.pat=[];
-  showGate("Sessão encerrada · entre novamente");
-  $("gPass").value="";
+  travar("Sessão encerrada · entre novamente");
   toast("Sessão encerrada.");
 }
 async function bootGate(){
+  iniciarMonitorInatividade();
+
+  // 1) cofre configurado: SEMPRE pede a palavra-chave, sem entrada automática
+  if(vaultExists()){ montarGate(); return; }
+
+  // 2) sem cofre: fluxo antigo, mas oferecendo a proteção
   const cfg = effectiveCreds();
   if(!cfg){
-    // primeiro acesso sem credenciais: pede configuração na própria tela
-    showGate("Configure a conexão para acessar");
+    montarGate("Configure a conexão para acessar");
     $("gSetup").open = true;
     return;
   }
   try{
-    DB.sb = window.supabase.createClient(cfg.url, cfg.key);
-  }catch(e){ showGate(); setGateErr("Falha ao iniciar conexão."); return; }
-  // sessão já ativa? entra direto
-  try{
-    const {data:{session}} = await DB.sb.auth.getSession();
-    if(session){ await unlock(); return; }
-  }catch(e){}
-  showGate();
+    DB.sb = window.supabase.createClient(cfg.url, cfg.key, {auth:{persistSession:false, autoRefreshToken:true}});
+  }catch(e){ montarGate(); setGateErr("Falha ao iniciar conexão."); return; }
+
+  // credenciais em texto puro de versões antigas: avisa e propõe migrar
+  let antigo=null;
+  try{ antigo = JSON.parse(safeStore.get("mesafin_sb")||"null"); }catch(e){}
+  if(antigo && antigo.email && antigo.pass){
+    montarGate("⚠ Suas credenciais estão salvas sem criptografia neste aparelho");
+    $("gVaultSetup").open = true;
+    $("gvEmail").value = antigo.email;
+    $("gvPass").value  = antigo.pass;
+    setGateErr("Recomendado: crie uma palavra-chave para criptografá-las.");
+    return;
+  }
+  montarGate();
 }
 
 </script>
