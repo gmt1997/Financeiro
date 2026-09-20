@@ -4805,6 +4805,7 @@ let rotFreqRange = 90;
 let rotEvoGroup = "sem";
 let rotEvoAtiv = "";            // "" = todas
 let rotCalFiltro = "";          // "" = todas
+let rotSort = {col:"total", dir:-1};   // ordenação da tabela de dias por atividade
 
 const ROT_CORES = ["#2A4C7D","#1F5E3D","#5FBF7C","#17A2AD","#7B2233","#7A4FA3",
   "#D4A017","#C0394B","#F0560A","#EBC934","#8A9A1E","#6FB3E0","#A8AFB5","#B06A85","#8C6250"];
@@ -4999,29 +5000,78 @@ function renderRotEvo(){
     const seg=new Date(y,m-1,d-dow);
     return diaISO(seg);
   };
-  const agg=new Map();
-  for(const r of regs){ const k=chave(r.data); agg.set(k,(agg.get(k)||0)+1); }
-  const chaves=[...agg.keys()].sort().slice(-26);
+  // matriz período × atividade
+  const porPeriodo = new Map();      // chave -> Map(atividade_id -> n)
+  for(const r of regs){
+    const k = chave(r.data);
+    if(!porPeriodo.has(k)) porPeriodo.set(k, new Map());
+    const m = porPeriodo.get(k);
+    m.set(r.atividade_id, (m.get(r.atividade_id)||0)+1);
+  }
+  const chaves = [...porPeriodo.keys()].sort().slice(-26);
   const label = k => rotEvoGroup==="mes" ? ymLabel(k) : k.slice(8,10)+"/"+k.slice(5,7);
-  const atv = rotEvoAtiv? rotAtvPorId(rotEvoAtiv) : null;
-  const cor = atv? rotCor(atv) : "#2A4C7D";
-  const vals = chaves.map(k=>agg.get(k)||0);
-  const media = vals.reduce((s,v)=>s+v,0)/(vals.length||1);
-  mkChart("chRotEvo",{
-    data:{labels:chaves.map(label),datasets:[
-      {type:"bar",label:atv?atv.nome:"Registros",data:vals,backgroundColor:cor+"C0",borderRadius:3},
-      {type:"line",label:"Média",data:chaves.map(()=>media),borderColor:"#6F6A61",borderDash:[5,4],
-       pointRadius:0,borderWidth:1.3,fill:false},
-    ]},
-    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:14}},y:{beginAtZero:true,ticks:{precision:0}}},
-      plugins:{legend:{labels:{boxWidth:10}},tooltip:{callbacks:{
-        label:c=>` ${c.dataset.label}: ${typeof c.parsed.y==="number"?c.parsed.y.toFixed(c.datasetIndex?1:0):c.parsed.y}`}}}}});
-}
 
+  // atividades presentes na janela, maiores embaixo da pilha
+  const totalPorAtv = new Map();
+  for(const k of chaves) for(const [id,n] of porPeriodo.get(k)) totalPorAtv.set(id,(totalPorAtv.get(id)||0)+n);
+  const ids = [...totalPorAtv.entries()].sort((a,b)=>b[1]-a[1]).map(([id])=>id);
+
+  const datasets = ids.map(id=>{
+    const a = rotAtvPorId(id);
+    return {type:"bar", label: a? a.nome : "—", stack:"rot",
+      data: chaves.map(k=>porPeriodo.get(k).get(id)||0),
+      backgroundColor: (a? rotCor(a) : "#9B958A")+"D9", borderWidth:0, borderRadius:2};
+  });
+  // linha de média do total por período
+  const totais = chaves.map(k=>[...porPeriodo.get(k).values()].reduce((s,v)=>s+v,0));
+  const media = totais.reduce((s,v)=>s+v,0)/(totais.length||1);
+  datasets.push({type:"line", label:"Média", data:chaves.map(()=>media),
+    borderColor:"#6F6A61", borderDash:[5,4], pointRadius:0, borderWidth:1.3, fill:false});
+
+  mkChart("chRotEvo",{
+    data:{labels:chaves.map(label), datasets},
+    options:{maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
+      scales:{x:{stacked:true, grid:{display:false}, ticks:{maxTicksLimit:14}},
+              y:{stacked:true, beginAtZero:true, ticks:{precision:0}}},
+      plugins:{
+        legend:{labels:{boxWidth:10, filter:i=>i.text!=="Média"}},
+        tooltip:{
+          filter: c => c.dataset.type==="line" || c.parsed.y>0,   // esconde atividades zeradas
+          callbacks:{
+            label: c => c.dataset.type==="line"
+              ? ` Média: ${c.parsed.y.toFixed(1)}`
+              : ` ${c.dataset.label}: ${c.parsed.y}`,
+            afterBody: items => {
+              const i = items.find(x=>x.dataset.type!=="line");
+              return i ? `Total no período: ${totais[i.dataIndex]}` : "";
+            }
+          }}}}});
+}
 function renderRotTabela(){
   const st = rotStats();
   if(!st.length){ $("tblRot").innerHTML = `<tbody><tr><td class="muted" style="padding:14px">Nenhuma atividade cadastrada.</td></tr></tbody>`; return; }
+  // ordenação clicável
+  const kv = s => {
+    switch(rotSort.col){
+      case "nome":    return (s.atv.nome||"").toLowerCase();
+      case "grupo":   return (s.atv.grupo||"~~~").toLowerCase();   // sem grupo vai pro fim
+      case "total":   return s.total;
+      case "atual":   return s.atual;
+      case "recorde": return s.recorde;
+      case "ult30":   return s.ult30;
+      // "nunca" fica sempre no fim; senão ordena por dias desde a última
+      case "ultima":  return s.desde==null ? Infinity : s.desde;
+      // sem meta vai pro fim; com meta, ordena pelo quanto falta para bater
+      case "meta":    return s.meta ? (s.ult7 - s.meta) : Infinity;
+      default:        return s.total;
+    }
+  };
+  st.sort((a,b)=>{ const A=kv(a), B=kv(b);
+    if(A===B) return (a.atv.nome||"").localeCompare(b.atv.nome||"","pt-BR");
+    if(A===Infinity) return 1; if(B===Infinity) return -1;   // "vazios" sempre por último
+    return A<B ? -rotSort.dir : rotSort.dir; });
+
+  const th = (c,l,n)=>`<th class="sortable${n?' num':''}${rotSort.col===c?' active':''}" data-rotsort="${c}">${l}<span class="s-arr">${rotSort.col===c?(rotSort.dir===-1?" ▼":" ▲"):""}</span></th>`;
   const semaforo = s => {
     if(!s.meta) return '<span class="muted">—</span>';
     if(s.ult7>=s.meta) return `<span class="tag rec">${s.ult7}/${s.meta}</span>`;
@@ -5029,7 +5079,7 @@ function renderRotTabela(){
     return `<span class="tag des">${s.ult7}/${s.meta}</span>`;
   };
   $("tblRot").innerHTML =
-    `<thead><tr><th>Atividade</th><th>Grupo</th><th class="num">Total de dias</th><th class="num">Sequência</th><th class="num">Recorde</th><th class="num">Últimos 30d</th><th>Última vez</th><th>Meta semanal</th><th></th></tr></thead><tbody>`+
+    `<thead><tr>${th("nome","Atividade")}${th("grupo","Grupo")}${th("total","Total de dias",1)}${th("atual","Sequência",1)}${th("recorde","Recorde",1)}${th("ult30","Últimos 30d",1)}${th("ultima","Última vez")}${th("meta","Meta semanal")}<th></th></tr></thead><tbody>`+
     st.map(s=>`<tr>
       <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${s.cor};margin-right:7px"></span>${s.atv.nome}</td>
       <td class="muted">${s.atv.grupo||"—"}</td>
@@ -5187,6 +5237,15 @@ document.addEventListener("DOMContentLoaded", ()=>{
         else toast("Erro: "+m);
       }
     };
+    // ordenar tabela
+    $("tblRot").addEventListener("click", e=>{
+      const th=e.target.closest("[data-rotsort]"); if(!th) return;
+      const c=th.dataset.rotsort;
+      // colunas de texto começam A→Z; as numéricas começam do maior
+      if(rotSort.col===c) rotSort.dir*=-1;
+      else rotSort={col:c, dir:(c==="nome"||c==="grupo"||c==="ultima")?1:-1};
+      renderRotTabela();
+    });
     // excluir atividade
     $("tblRot").addEventListener("click", async e=>{
       const b=e.target.closest("[data-delatv]"); if(!b) return;
