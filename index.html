@@ -294,6 +294,11 @@ input[type=file]::file-selector-button:hover{border-color:var(--text)}
 /* RE por banco */
 .re-banks{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
 .re-bank{display:flex;align-items:center;gap:6px}
+.re-bank .re-rm{background:none;border:0;color:var(--dim);cursor:pointer;font-size:.78rem;padding:0 3px;line-height:1;opacity:0;transition:opacity .12s}
+.re-bank:hover .re-rm{opacity:1}
+.re-bank .re-rm:hover{color:var(--neg)}
+.re-add{display:flex;gap:7px;margin-top:9px;align-items:center}
+.re-add input{flex:1;min-width:0}
 .re-bank-label{font-size:.75rem;color:var(--dim);min-width:80px}
 .re-bank input{flex:1;min-width:0}
 
@@ -2363,6 +2368,30 @@ function renderBtcExpo(total, btcVal){
     <div class="expo-status ${sev}">${msg}${ajusteBtc!=null && Math.abs(ajuste)>total*0.01 ? ` <b>${ajuste>0?"Excesso":"Espaço"} de ${fmtBRL0(Math.abs(ajuste))}</b> (≈ ${ajusteBtc.toFixed(4)} ₿)` : ""}</div>`;
 }
 
+/* ===== Reserva de emergência: instituições (lista editável) ===== */
+const RE_BANKS_PADRAO = ["Nubank","Itaú","PicPay","Mercado Pago"];
+/** União: lista salva pelo usuário + qualquer banco já presente no histórico. */
+function reBancos(){
+  let salvos = null;
+  try{ const r = safeStore.get("fin_re_bancos"); if(r) salvos = JSON.parse(r); }catch(e){}
+  const base = Array.isArray(salvos) && salvos.length ? salvos : RE_BANKS_PADRAO.slice();
+  const vistos = new Set(base);
+  // nunca perder um banco que já aparece em algum fechamento antigo
+  for(const p of (DB.pat||[])){
+    const d = p && p.re_detalhe;
+    if(d && typeof d==="object") for(const k of Object.keys(d)) if(!vistos.has(k)){ base.push(k); vistos.add(k); }
+  }
+  return base;
+}
+function setReBancos(lista){ safeStore.set("fin_re_bancos", JSON.stringify(lista)); }
+function reBankRow(b){
+  return `<div class="re-bank" data-bankrow="${b}">
+    <span class="re-bank-label">${b}</span>
+    <input type="number" step="0.01" min="0" class="re-input" data-bank="${b}" placeholder="0,00">
+    <button type="button" class="re-rm" data-rmbank="${b}" title="Remover esta instituição do formulário">✕</button>
+  </div>`;
+}
+
 function renderPat(){
   const p = DB.pat;
   if(!p.length) return;
@@ -2397,15 +2426,18 @@ function renderPat(){
     options:{maintainAspectRatio:false,scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12}},y:{ticks:{callback:v=>v.toFixed(1)+"%"}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.y.toFixed(2)}%`}}}}});
 
   // form
-  const RE_BANKS = ["Nubank","Itaú","PicPay","Mercado Pago"];
+  const RE_BANKS = reBancos();
   if(!$("patForm").dataset.built){
     const next = (()=>{ const [y,m]=last.mes.split("-").map(Number); const d=new Date(y,m,1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); })();
     const classFields = PAT_CLASSES.map(([k,n])=>{
       if(k==="re"){
-        // substituir por sub-campos de bancos
+        // sub-campos por instituição (lista editável)
         return `<div class="f wide"><label>Reserva de Emergência</label>
-          <div class="re-banks">${RE_BANKS.map(b=>`<div class="re-bank"><span class="re-bank-label">${b}</span><input type="number" step="0.01" min="0" class="re-input" data-bank="${b}" placeholder="0,00"></div>`).join("")}
-          <div class="re-bank"><span class="re-bank-label"><b>Total RE</b></span><input type="number" id="p_re" readonly tabindex="-1" style="background:var(--panel2);font-weight:600"></div></div></div>`;
+          <div class="re-banks" id="reBanks">${RE_BANKS.map(b=>reBankRow(b)).join("")}
+          <div class="re-bank"><span class="re-bank-label"><b>Total RE</b></span><input type="number" id="p_re" readonly tabindex="-1" style="background:var(--panel2);font-weight:600"></div></div>
+          <div class="re-add"><input type="text" id="reNovoBanco" placeholder="Adicionar instituição (ex.: Inter)" list="reBancosSug">
+            <datalist id="reBancosSug">${CARTOES_BASE.map(c=>`<option value="${c}">`).join("")}</datalist>
+            <button type="button" class="btn" id="reAddBanco">+ Adicionar</button></div></div>`;
       }
       return `<div class="f"><label>${n}</label><input type="number" step="0.01" min="0" id="p_${k}" placeholder="0,00"></div>`;
     }).join("");
@@ -2416,11 +2448,35 @@ function renderPat(){
     $("patForm").dataset.built = "1";
     $("pAdd").onclick = onAddPat;
     // auto-somar RE ao digitar
-    $("patForm").addEventListener("input", e=>{
-      if(e.target.classList.contains("re-input")){
-        const total = [...$("patForm").querySelectorAll(".re-input")].reduce((s,i)=>s+(+i.value||0),0);
-        $("p_re").value = total.toFixed(2);
-      }
+    const somarRE = ()=>{
+      const total = [...$("patForm").querySelectorAll(".re-input")].reduce((s,i)=>s+(+i.value||0),0);
+      $("p_re").value = total.toFixed(2);
+    };
+    $("patForm").addEventListener("input", e=>{ if(e.target.classList.contains("re-input")) somarRE(); });
+
+    // adicionar instituição
+    $("reAddBanco").onclick = ()=>{
+      const nome = $("reNovoBanco").value.trim();
+      if(!nome) return toast("Informe o nome da instituição.");
+      const atuais = [...$("patForm").querySelectorAll(".re-input")].map(i=>i.dataset.bank);
+      if(atuais.some(b=>_nk(b)===_nk(nome))) return toast("Essa instituição já está na lista.");
+      $("p_re").closest(".re-bank").insertAdjacentHTML("beforebegin", reBankRow(nome));
+      setReBancos([...atuais, nome]);
+      $("reNovoBanco").value = "";
+      const novo = $("patForm").querySelector(`.re-input[data-bank="${nome}"]`);
+      if(novo) novo.focus();
+    };
+    $("reNovoBanco").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("reAddBanco").click(); } });
+
+    // remover instituição (só do formulário; histórico é preservado)
+    $("patForm").addEventListener("click", e=>{
+      const b = e.target.closest("[data-rmbank]"); if(!b) return;
+      const nome = b.dataset.rmbank;
+      const usado = (DB.pat||[]).some(p=>p.re_detalhe && typeof p.re_detalhe==="object" && +p.re_detalhe[nome]>0);
+      if(usado && !confirm(`"${nome}" aparece em fechamentos já registrados.\n\nRemover só tira do formulário daqui pra frente — o histórico continua intacto. Continuar?`)) return;
+      b.closest("[data-bankrow]").remove();
+      setReBancos([...$("patForm").querySelectorAll(".re-input")].map(i=>i.dataset.bank));
+      somarRE();
     });
     // pré-preencher com último detalhe se existir
     const lastDet = last.re_detalhe;
@@ -2438,7 +2494,7 @@ function renderPat(){
   const reTooltip = r => {
     const det = r.re_detalhe;
     if(!det || typeof det !== "object") return "";
-    const lines = RE_BANKS.filter(b=>det[b]).map(b=>`${b}: ${fmtBRL0(det[b])}`).join("\n");
+    const lines = Object.keys(det).filter(b=>+det[b]).map(b=>`${b}: ${fmtBRL0(det[b])}`).join("\n");
     return lines ? ` title="${lines}" style="cursor:help;text-decoration:underline dotted var(--dim)"` : "";
   };
   const rows = [...p].reverse().slice(0,60);
@@ -2493,11 +2549,15 @@ function btcSerieValor(){
     .sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
   if(!ops.length) return {serie:[], temDados:false};
 
-  // preço observado por mês (média ponderada das ordens do mês)
+  // Preço observado por mês (média ponderada das ordens do mês).
+  // Baixas por perda ficam de fora: não são transação de mercado e entrariam
+  // com quantidade cheia e valor zero, derrubando artificialmente o preço do mês.
   const obs = new Map();
   for(const b of ops){
+    if(isPerda(b)) continue;
     const ym = b.data.slice(0,7);
     const q = +b.quantidade, t = +b.total || (+b.preco||0)*q;
+    if(!(q>0) || !(t>0)) continue;            // ignora linha sem preço utilizável
     if(!obs.has(ym)) obs.set(ym, {q:0, t:0});
     const o = obs.get(ym); o.q += q; o.t += t;
   }
@@ -2545,6 +2605,11 @@ function btcSerieValor(){
   const idxObs = meses.map((ym,i)=> precoObs.has(ym) ? i : -1).filter(i=>i>=0);
   const precos = new Array(meses.length).fill(null);
   const fontes = new Array(meses.length).fill(null);
+  if(!idxObs.length){
+    // nenhuma ordem com preço (ex.: só baixas por perda): usa a cotação atual
+    const px = getBtcPx() || 0;
+    precos.fill(px); fontes.fill(px? "cotação" : "estimado");
+  } else {
   for(const i of idxObs){ precos[i] = precoObs.get(meses[i]); fontes[i] = "ordem"; }
   // antes da primeira observação
   for(let i=0;i<idxObs[0];i++){ precos[i]=precos[idxObs[0]]; fontes[i]="estimado"; }
@@ -2567,6 +2632,7 @@ function btcSerieValor(){
     } else { precos[i]=precos[ultObs]; fontes[i]="estimado"; }
   }
   if(pxAtual && meses.length){ precos[meses.length-1]=pxAtual; fontes[meses.length-1]="cotação"; }
+  }
 
   const patCripto = new Map((DB.pat||[]).filter(p=>p&&p.mes).map(p=>[p.mes, p.cripto||0]));
   const serie = meses.map((ym,i)=>{
@@ -2676,7 +2742,7 @@ function renderBtc(){
         label:c=>{
           if(c.dataset.yAxisID==="y"){                    // linha de acumulação
             const p=pts[c.dataIndex];
-            const saldo = p&&p.price!=null ? p.cumQty*p.price : null;
+            const saldo = p && p.price>0 && p.op!=="perda" ? p.cumQty*p.price : null;
             return [` Acumulado: ₿${c.parsed.y.toFixed(8)}`, saldo!=null?` Saldo: ${fmtBRL(saldo)}`:null].filter(Boolean);
           }
           if(c.dataset.label==="Preço médio") return ` Preço médio: ${fmtBRL(c.parsed.y)}`;
